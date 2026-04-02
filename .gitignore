@@ -1,0 +1,15 @@
+.idea/
+.vscode/
+*.iml
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+*.log
+*.tmp
+*.temp
+
+1688_parsed_*.xlsx
+~$*.xlsx
+*.zip

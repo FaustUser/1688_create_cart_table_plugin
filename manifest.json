@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "1688 → Excel (images + paid price)",
+  "version": "1.4.0",
+  "description": "1688: автоскролл/раскрытие, XLSX «Товары», вставка картинок, цена = total-price (после скидок).",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "1688 → Excel"
+  },
+  "permissions": [
+    "downloads",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.1688.com/*",
+    "https://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.1688.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
