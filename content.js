@@ -394,7 +394,11 @@ function parseCartGroup(groupEl){
     const checkbox = itemEl.querySelector('label[class*="item--checkbox--"]') || itemEl.querySelector('input[type="checkbox"]');
     if (!isChecked(checkbox || itemEl)) continue;
     
-    const variant = text(itemEl.querySelector('span[class*="item--titleText--"]') || itemEl.querySelector('div[class*="item--title--"]'));
+    const variant = text(
+      itemEl.querySelector('div[class*="item--titleText--"]') ||
+      itemEl.querySelector('span[class*="item--titleText--"]') ||
+      itemEl.querySelector('div[class*="item--title--"]')
+    );
     const itemImg = itemEl.querySelector('div[class*="item--image--"] img') || itemEl.querySelector("img");
     const imgUrl = getImageSrc(itemImg) || getImageSrc(groupImg);
     const qty = parseCartQty(itemEl);
@@ -402,7 +406,7 @@ function parseCartGroup(groupEl){
     const subtotal = num(text(subtotalEl || ""));
     const discountEl = itemEl.querySelector('div[class*="item--discount--"]');
     const discountShare = num(text(discountEl || ""));
-    const exportTitle = [groupTitle, variant].filter(Boolean).join(" | ");
+    const exportTitle = variant || groupTitle;
     
     if (!link && !groupTitle && !variant) continue;
     
@@ -411,7 +415,7 @@ function parseCartGroup(groupEl){
       link,
       imgUrl,
       variant,
-      exportTitle: exportTitle || groupTitle || variant,
+      exportTitle: exportTitle || variant || groupTitle,
       qty,
       unitPrice: sharedRebatePrice || 0,
       shippingShare: 0,

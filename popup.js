@@ -806,7 +806,7 @@ const CART_EXPORT_CONFIG = {
   widths: (imgColWidth) => [imgColWidth ? imgColWidth.toFixed(2) : "30", "28", "60"],
   buildCells: (row) => ([
     { c: 2, t: "inlineStr", v: row.link || "", s: "1" },
-    { c: 3, t: "inlineStr", v: row.exportTitle || row.title || row.variant || "", s: "1" }
+    { c: 3, t: "inlineStr", v: row.exportTitle || row.variant || row.title || "", s: "1" }
   ])
 };
 
