@@ -38,7 +38,7 @@ function isMissingReceiverError(error) {
 
 async function ensureContentScript(tabId) {
   await chrome.scripting.executeScript({
-    target: { tabId, allFrames: true },
+    target: { tabId, frameIds: [0] },
     files: ["content.js"]
   });
 }
@@ -49,7 +49,7 @@ async function send(tab, type) {
   const payload = { type, step, wait };
 
   try {
-    return await chrome.tabs.sendMessage(tab.id, payload);
+    return await chrome.tabs.sendMessage(tab.id, payload, { frameId: 0 });
   } catch (error) {
     if (!isMissingReceiverError(error)) throw error;
     if (!is1688Tab(tab)) {
@@ -57,7 +57,7 @@ async function send(tab, type) {
     }
 
     await ensureContentScript(tab.id);
-    return chrome.tabs.sendMessage(tab.id, payload);
+    return chrome.tabs.sendMessage(tab.id, payload, { frameId: 0 });
   }
 }
 
