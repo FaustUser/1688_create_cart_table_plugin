@@ -146,6 +146,22 @@ function getPrimaryEntryCount(root=document){
   return 0;
 }
 
+async function scrollToTopAndWait(wait = 250){
+  const scroller = document.scrollingElement || document.documentElement || document.body;
+  const currentTop = window.scrollY || scroller.scrollTop || 0;
+  
+  if (currentTop <= 2) return;
+  
+  for (let i = 0; i < 4; i++) {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    scroller.scrollTop = 0;
+    await sleep(wait);
+    
+    const top = window.scrollY || scroller.scrollTop || 0;
+    if (top <= 2) break;
+  }
+}
+
 // Раскрывает/прокручивает список заказов (автоскролл),
 // чтобы подгрузились все элементы (цикл ограничен maxLoops)
 async function expandAll(maxLoops = 20, wait = 300){
@@ -472,6 +488,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       // Одноразовый экспорт: раскрываем все и собираем строки
       if (msg?.type === "WB_1688_EXPORT") {
+        await scrollToTopAndWait(Math.min(wait, 300));
         await expandAll(22, wait);
         const { pageType, blocks, entries, selectedEntries, rows } = collectAllRows();
         sendResponse({ ok:true, count: rows.length, pageType, blocks, orders: blocks, entries, selectedEntries, rows });
@@ -481,6 +498,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       // Авто‑режим: автоскролл + раскрытие заказов, затем сбор строк
       if (msg?.type === "WB_1688_AUTO") {
+        await scrollToTopAndWait(Math.min(wait, 300));
         await autoScrollAndWait(step, wait, 7, 260);
         await expandAll(22, wait);
         const { pageType, blocks, entries, selectedEntries, rows } = collectAllRows();
