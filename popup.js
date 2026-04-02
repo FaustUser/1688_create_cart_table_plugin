@@ -22,16 +22,43 @@ function log(msg, cls="") {
 async function withActiveTab(fn) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) throw new Error("Активная вкладка не найдена");
-  return fn(tab.id);
+  return fn(tab);
 }
 
 // Отправляет сообщение в content‑script на вкладке
 // type — \"WB_1688_AUTO\" или \"WB_1688_EXPORT\"
 // вместе с ним передаём step и wait из полей настроек
-async function send(tabId, type) {
+function is1688Tab(tab) {
+  return /^https:\/\/([^/]+\.)?1688\.com\//i.test(String(tab?.url || ""));
+}
+
+function isMissingReceiverError(error) {
+  return /Receiving end does not exist|Could not establish connection/i.test(String(error?.message || error || ""));
+}
+
+async function ensureContentScript(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    files: ["content.js"]
+  });
+}
+
+async function send(tab, type) {
   const step = Number(stepEl.value || 900);
   const wait = Number(waitEl.value || 650);
-  return chrome.tabs.sendMessage(tabId, { type, step, wait });
+  const payload = { type, step, wait };
+
+  try {
+    return await chrome.tabs.sendMessage(tab.id, payload);
+  } catch (error) {
+    if (!isMissingReceiverError(error)) throw error;
+    if (!is1688Tab(tab)) {
+      throw new Error("Открой страницу 1688 с заказами или корзиной и повтори.");
+    }
+
+    await ensureContentScript(tab.id);
+    return chrome.tabs.sendMessage(tab.id, payload);
+  }
 }
 
 // Универсальный парсер числа из строки (учитывает запятую и точку)
