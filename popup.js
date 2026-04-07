@@ -7,6 +7,9 @@ const autoBtn = $("auto");     // кнопка "Авто"
 const stepEl = $("step");      // input шага скролла
 const waitEl = $("wait");      // input задержки
 const imgEl = $("img");        // input размера картинки
+const progressEl = $("progress");
+const progressTextEl = $("progressText");
+const progressFillEl = $("progressFill");
 
 // Добавляет строку в лог внутри popup'а
 // msg — текст сообщения, cls — CSS‑класс (\"ok\", \"err\" и т.п.)
@@ -16,6 +19,34 @@ function log(msg, cls="") {
   line.textContent = msg;
   logEl.appendChild(line);
   logEl.scrollTop = logEl.scrollHeight; // скроллим лог вниз
+}
+
+function showProgress() {
+  progressEl.classList.add("visible");
+}
+
+function hideProgress() {
+  progressEl.classList.remove("visible");
+}
+
+function setProgress(value, text = "") {
+  const safeValue = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+  progressFillEl.style.width = `${safeValue}%`;
+  if (text) progressTextEl.textContent = text;
+}
+
+function resetProgress(text = "Подготовка…") {
+  showProgress();
+  setProgress(0, text);
+}
+
+function markProgressError(text = "Ошибка") {
+  showProgress();
+  setProgress(100, text);
+}
+
+function yieldToUi() {
+  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
 // Выполняет fn с id активной вкладки (используется для отправки сообщений content‑script'у)
@@ -43,10 +74,20 @@ async function ensureContentScript(tabId) {
   });
 }
 
-async function send(tab, type) {
+function getCartSelectionMode() {
+  return document.querySelector('input[name="cartScope"]:checked')?.value === "selected"
+    ? "selected"
+    : "all";
+}
+
+function getCartSelectionModeLabel(mode) {
+  return mode === "selected" ? "только отмеченные" : "все товары";
+}
+
+async function send(tab, type, extraPayload = {}) {
   const step = Number(stepEl.value || 900);
   const wait = Number(waitEl.value || 650);
-  const payload = { type, step, wait };
+  const payload = { type, step, wait, ...extraPayload };
 
   try {
     return await chrome.tabs.sendMessage(tab.id, payload, { frameId: 0 });
@@ -614,9 +655,16 @@ function updateContentTypes(xmlText, drawingPartName, imageExts) {
 
 // Собирает XLSX с данными rows и, опционально, картинками.
 // imgPx        — размер картинки в px (для ячеек)
-async function buildAndDownload(rows, imgPx, pageType="orders"){
+async function buildAndDownload(rows, imgPx, pageType="orders", onProgress = null){
+  const reportProgress = (value, text) => {
+    if (typeof onProgress === "function") onProgress(value, text);
+  };
   const images = [];
   const maxImages = Math.min(rows.length, 300); // ограничиваем число встраиваемых картинок
+  const progressImageStep = maxImages ? Math.max(1, Math.ceil(maxImages / 24)) : 1;
+
+  reportProgress(12, maxImages ? `Загружаем картинки: 0 / ${maxImages}` : "Картинок для загрузки нет");
+  await yieldToUi();
 
   // Загружаем картинки для первых maxImages строк
   for(let i=0;i<maxImages;i++){
@@ -627,6 +675,13 @@ async function buildAndDownload(rows, imgPx, pageType="orders"){
       images.push({rowIndex: i, ...img});
     } else {
       images.push(null);
+    }
+
+    const done = i + 1;
+    if (done === maxImages || done % progressImageStep === 0) {
+      const progressValue = 12 + Math.round((done / Math.max(maxImages, 1)) * 58);
+      reportProgress(progressValue, `Загружаем картинки: ${done} / ${maxImages}`);
+      await yieldToUi();
     }
   }
 
@@ -640,6 +695,9 @@ async function buildAndDownload(rows, imgPx, pageType="orders"){
       embeddedRowIdx.push(i); 
     }
   }
+
+  reportProgress(74, `Собираем Excel: ${embedded.length} картинок подготовлено`);
+  await yieldToUi();
 
   // создаёт рисунки-анкеры
   // в листе, привязывая каждую картинку к своей строке.
@@ -801,10 +859,15 @@ async function buildAndDownload(rows, imgPx, pageType="orders"){
     }
   }
 
+  reportProgress(88, "Упаковываем Excel-файл…");
+  await yieldToUi();
   const xlsxBytes = zipStore(files);
+  reportProgress(96, "Открываем окно сохранения…");
+  await yieldToUi();
   const blob = new Blob([xlsxBytes], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
   const url = URL.createObjectURL(blob);
   await chrome.downloads.download({ url, filename:"1688_parsed_Товары.xlsx", saveAs:true });
+  reportProgress(100, "Файл готов к сохранению");
   
   return imagesEmbedded;
 }
@@ -900,6 +963,8 @@ async function runTabExportLegacy(type, label) {
   try{
     autoBtn.disabled = true;
     log(label);
+    resetProgress("Собираем данные на странице…");
+    setProgress(6, "Собираем данные на странице…");
 
     // Получаем данные с активной вкладки
     const resp = await withActiveTab((tabId) => send(tabId, type));
@@ -915,10 +980,11 @@ async function runTabExportLegacy(type, label) {
     log(`rows: ${rows.length}`, "ok");
 
     // просто строим и скачиваем Excel
-    const images = await buildAndDownload(rows, imgPx);
+    const images = await buildAndDownload(rows, imgPx, "orders", setProgress);
     log(`images embedded: ${images}`, "ok");
     log("Готово.", "ok");
   } catch (e) {
+    markProgressError("Ошибка. Подробности в логе.");
     log(String(e?.message || e), "err");
   } finally {
     autoBtn.disabled = false;
@@ -931,13 +997,21 @@ async function runTabExport(type, label) {
   try{
     autoBtn.disabled = true;
     log(label);
+    resetProgress("Собираем данные на странице…");
+    setProgress(6, "Собираем данные на странице…");
 
-    const resp = await withActiveTab((tabId) => send(tabId, type));
+    const requestedCartSelectionMode = getCartSelectionMode();
+    const resp = await withActiveTab((tabId) => send(tabId, type, { cartSelectionMode: requestedCartSelectionMode }));
     if (!resp?.ok) throw new Error(resp?.error || "Ошибка");
 
     const rows = Array.isArray(resp.rows) ? resp.rows : [];
     if (!rows.length) {
-      if (resp.pageType === "cart") throw new Error("Не удалось собрать отмеченные товары из корзины.");
+      if (resp.pageType === "cart") {
+        if ((resp.cartSelectionMode || requestedCartSelectionMode) === "selected") {
+          throw new Error("Не удалось собрать отмеченные товары из корзины.");
+        }
+        throw new Error("Не удалось собрать товары из корзины.");
+      }
       if (resp.pageType === "unknown") throw new Error("На вкладке не найдены ни заказы, ни корзина 1688.");
       throw new Error("Не удалось собрать строки из вкладки.");
     }
@@ -948,13 +1022,18 @@ async function runTabExport(type, label) {
 
     log(`${sectionLabel}: ${resp.blocks ?? resp.orders ?? 0}`, "ok");
     log(`${entryLabel}: ${resp.entries ?? 0}`, "ok");
-    if (resp.pageType === "cart") log(`selected cart items: ${resp.selectedEntries ?? rows.length}`, "ok");
+    if (resp.pageType === "cart") {
+      log(`cart mode: ${getCartSelectionModeLabel(resp.cartSelectionMode || requestedCartSelectionMode)}`, "ok");
+      log(`selected cart items: ${resp.selectedEntries ?? 0}`, "ok");
+      log(`collected cart items: ${resp.collectedEntries ?? rows.length}`, "ok");
+    }
     log(`rows: ${rows.length}`, "ok");
 
-    const images = await buildAndDownload(rows, imgPx, resp.pageType || "orders");
+    const images = await buildAndDownload(rows, imgPx, resp.pageType || "orders", setProgress);
     log(`images embedded: ${images}`, "ok");
     log("Готово.", "ok");
   } catch (e) {
+    markProgressError("Ошибка. Подробности в логе.");
     log(String(e?.message || e), "err");
   } finally {
     autoBtn.disabled = false;

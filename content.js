@@ -395,7 +395,12 @@ function parseCartQty(itemEl){
   return Math.max(0, Math.trunc(num(raw)));
 }
 
-function parseCartGroup(groupEl){
+function normalizeCartSelectionMode(mode){
+  return mode === "selected" ? "selected" : "all";
+}
+
+function parseCartGroup(groupEl, cartSelectionMode = "all"){
+  const normalizedMode = normalizeCartSelectionMode(cartSelectionMode);
   const titleA = groupEl.querySelector('a[class*="item-group--title--"]');
   const groupTitle = text(titleA);
   const link = cleanOfferLink(titleA?.getAttribute("href") || "");
@@ -405,10 +410,14 @@ function parseCartGroup(groupEl){
   const sharedRebatePrice = num(text(rebateEl || ""));
   const itemRows = Array.from(groupEl.querySelectorAll('tr[class*="item--container--"]'));
   const rows = [];
+  let selectedEntries = 0;
   
   for (const itemEl of itemRows) {
     const checkbox = itemEl.querySelector('label[class*="item--checkbox--"]') || itemEl.querySelector('input[type="checkbox"]');
-    if (!isChecked(checkbox || itemEl)) continue;
+    const checked = isChecked(checkbox || itemEl);
+
+    if (checked) selectedEntries++;
+    if (normalizedMode === "selected" && !checked) continue;
     
     const variant = text(
       itemEl.querySelector('div[class*="item--titleText--"]') ||
@@ -440,7 +449,11 @@ function parseCartGroup(groupEl){
     });
   }
   
-  return rows;
+  return {
+    entries: itemRows.length,
+    selectedEntries,
+    rows
+  };
 }
 
 function collectOrderRows(){
@@ -457,27 +470,46 @@ function collectOrderRows(){
   };
 }
 
-function collectCartRows(){
+function collectCartRows(cartSelectionMode = "all"){
+  const normalizedMode = normalizeCartSelectionMode(cartSelectionMode);
   const groups = queryAllByClassFragment("item-group-container--container--");
   const all = [];
-  for (const g of groups) all.push(...parseCartGroup(g));
+  let entries = 0;
+  let selectedEntries = 0;
+
+  for (const g of groups) {
+    const parsedGroup = parseCartGroup(g, normalizedMode);
+    entries += parsedGroup.entries;
+    selectedEntries += parsedGroup.selectedEntries;
+    all.push(...parsedGroup.rows);
+  }
   
   return {
     pageType: "cart",
     blocks: groups.length,
-    entries: queryAllByClassFragment("item--container--").length,
-    selectedEntries: all.length,
+    entries,
+    selectedEntries,
+    collectedEntries: all.length,
+    cartSelectionMode: normalizedMode,
     rows: all
   };
 }
 
-function collectAllRows(){
+function collectAllRows(cartSelectionMode = "all"){
   const pageType = detectPageType();
   
   if (pageType === "orders") return collectOrderRows();
-  if (pageType === "cart") return collectCartRows();
+  if (pageType === "cart") return collectCartRows(cartSelectionMode);
   
-  return { pageType: "unknown", blocks: 0, entries: 0, selectedEntries: 0, rows: [] };
+  return {
+    pageType: "unknown",
+    blocks: 0,
+    entries: 0,
+    selectedEntries: 0,
+    collectedEntries: 0,
+    cartSelectionMode: normalizeCartSelectionMode(cartSelectionMode),
+    rows: []
+  };
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -485,13 +517,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     try {
       const step = Number(msg?.step || 900); // шаг скролла для авто‑режима
       const wait = Number(msg?.wait || 650); // пауза между шагами
+      const cartSelectionMode = normalizeCartSelectionMode(msg?.cartSelectionMode);
 
       // Одноразовый экспорт: раскрываем все и собираем строки
       if (msg?.type === "WB_1688_EXPORT") {
         await scrollToTopAndWait(Math.min(wait, 300));
         await expandAll(22, wait);
-        const { pageType, blocks, entries, selectedEntries, rows } = collectAllRows();
-        sendResponse({ ok:true, count: rows.length, pageType, blocks, orders: blocks, entries, selectedEntries, rows });
+        const { pageType, blocks, entries, selectedEntries, collectedEntries, rows } = collectAllRows(cartSelectionMode);
+        sendResponse({ ok:true, count: rows.length, pageType, blocks, orders: blocks, entries, selectedEntries, collectedEntries, cartSelectionMode, rows });
         
         return;
       }
@@ -501,8 +534,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await scrollToTopAndWait(Math.min(wait, 300));
         await autoScrollAndWait(step, wait, 7, 260);
         await expandAll(22, wait);
-        const { pageType, blocks, entries, selectedEntries, rows } = collectAllRows();
-        sendResponse({ ok:true, count: rows.length, pageType, blocks, orders: blocks, entries, selectedEntries, rows });
+        const { pageType, blocks, entries, selectedEntries, collectedEntries, rows } = collectAllRows(cartSelectionMode);
+        sendResponse({ ok:true, count: rows.length, pageType, blocks, orders: blocks, entries, selectedEntries, collectedEntries, cartSelectionMode, rows });
         return;
       }
 
