@@ -70,7 +70,7 @@ function isMissingReceiverError(error) {
 async function ensureContentScript(tabId) {
   await chrome.scripting.executeScript({
     target: { tabId, frameIds: [0] },
-    files: ["content.js"]
+    files: ["order-metadata.js", "content.js"]
   });
 }
 
@@ -701,12 +701,12 @@ async function buildAndDownload(rows, imgPx, pageType="orders", onProgress = nul
 
   // создаёт рисунки-анкеры
   // в листе, привязывая каждую картинку к своей строке.
-  function makeDrawingXMLMapped(imgCount, imgPx, rowIdx){
+  function makeDrawingXMLMapped(imgCount, imgPx, rowIdx, imageCol0){
     const cx=Math.round(imgPx*9525), cy=Math.round(imgPx*9525);
     let anchors="";
     for(let i=0;i<imgCount;i++){
       const row0=1 + rowIdx[i]; // 0‑based, но у нас первая строка — заголовки
-      const col0 = 0;             // колонка A = 0
+      const col0 = imageCol0;
       const picId= 1000 + i;
       const rId = "rId" + (i + 1);
       
@@ -845,7 +845,12 @@ async function buildAndDownload(rows, imgPx, pageType="orders", onProgress = nul
 
   let imagesEmbedded = 0;
   if(hasDrawing){
-    const drawingXml = makeDrawingXMLMapped(embedded.length, imgPx, embeddedRowIdx);
+    const drawingXml = makeDrawingXMLMapped(
+      embedded.length,
+      imgPx,
+      embeddedRowIdx,
+      pageType === "orders" ? 1 : 0
+    );
     const imageNames = embedded.map((img, idx) => `image${idx + 1}.${img.ext}`);
     const drawingRels = makeDrawingRels(imageNames);
     
@@ -878,16 +883,18 @@ const contentHeaders = ["Картинка", "Ссылка", "Название н
 // type  — WB_1688_AUTO или WB_1688_EXPORT
 // label — сообщение в лог на время выполнения
 const ORDER_EXPORT_CONFIG = {
-  headers: ["Картинка", "Ссылка", "Название на 1688", "Количество", "Цена за ед.", "Доставка по Китаю", "Скидка", "Итого юань"],
-  widths: (imgColWidth) => [imgColWidth ? imgColWidth.toFixed(2) : "30", "24", "24", "11.5", "11.5", "17.3", "8.3", "11"],
+  headers: ["Номер заказа", "Картинка", "Дата заказа", "Ссылка", "Название на 1688", "Количество", "Цена за ед.", "Доставка по Китаю", "Скидка", "Итого юань"],
+  widths: (imgColWidth) => ["24", imgColWidth ? imgColWidth.toFixed(2) : "30", "22", "24", "24", "11.5", "11.5", "17.3", "8.3", "11"],
   buildCells: (row, excelRow) => ([
-    { c: 2, t: "inlineStr", v: row.link || "", s: "1" },
-    { c: 3, t: "inlineStr", v: row.exportTitle || row.variant || row.title || "", s: "1" },
-    { c: 4, t: "n", v: Number(row.qty || 0), s: "0" },
-    { c: 5, t: "n", v: Number(row.unitPrice || 0), s: "2" },
-    { c: 6, t: "n", v: Number(row.shippingShare || 0), s: "2" },
-    { c: 7, t: "n", v: Number(row.discountShare || 0), s: "2" },
-    { c: 8, t: "f", f: `D${excelRow}*E${excelRow}+F${excelRow}-G${excelRow}`, s: "2" }
+    { c: 1, t: "inlineStr", v: row.orderNumber || "", s: "1" },
+    { c: 3, t: "inlineStr", v: row.orderDate || "", s: "1" },
+    { c: 4, t: "inlineStr", v: row.link || "", s: "1" },
+    { c: 5, t: "inlineStr", v: row.exportTitle || row.variant || row.title || "", s: "1" },
+    { c: 6, t: "n", v: Number(row.qty || 0), s: "0" },
+    { c: 7, t: "n", v: Number(row.unitPrice || 0), s: "2" },
+    { c: 8, t: "n", v: Number(row.shippingShare || 0), s: "2" },
+    { c: 9, t: "n", v: Number(row.discountShare || 0), s: "2" },
+    { c: 10, t: "f", f: `F${excelRow}*G${excelRow}+H${excelRow}-I${excelRow}`, s: "2" }
   ])
 };
 

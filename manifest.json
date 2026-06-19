@@ -22,6 +22,7 @@
         "https://*.1688.com/*"
       ],
       "js": [
+        "order-metadata.js",
         "content.js"
       ],
       "run_at": "document_idle",

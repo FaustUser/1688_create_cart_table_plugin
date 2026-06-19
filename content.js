@@ -316,6 +316,33 @@ function parseOrderTotals(orderContentEl){
 // распределяет по ним доставку и скидку пропорционально
 function parseOrderBlock(orderContentEl){
   const { paidTotal, originalTotal, shippingTotal } = parseOrderTotals(orderContentEl);
+  const metadataSelectors = [
+    "order-item-header",
+    ".order-item-header",
+    "[class*=order-header]",
+    "[class*=order-info]",
+    "[class*=order-number]",
+    "[class*=order-time]"
+  ];
+  const orderContainer = orderContentEl.closest?.(
+    "order-item, .order-item, [class*=order-item-container], [class*=order-container]"
+  );
+  const metadataRoots = Array.from(new Set([
+    orderContentEl,
+    orderContentEl.previousElementSibling,
+    orderContainer
+  ].filter(Boolean)));
+  const metadataParts = [];
+  for (const root of metadataRoots) {
+    for (const selector of metadataSelectors) {
+      for (const element of deepQueryAll(selector, root)) {
+        const value = text(element);
+        if (value) metadataParts.push(value);
+      }
+    }
+  }
+  metadataParts.push(...metadataRoots.map(text));
+  const { orderNumber, orderDate } = parseOrderMetadata(metadataParts.join(" "));
 
   // Все позиции (товары) в заказе
   const entries = deepQueryAll(".order-item-entry", orderContentEl);
@@ -360,6 +387,8 @@ function parseOrderBlock(orderContentEl){
     
     rows.push({
       ...row,
+      orderNumber,
+      orderDate,
       paidTotal,
       originalTotal,
       shippingTotal,
