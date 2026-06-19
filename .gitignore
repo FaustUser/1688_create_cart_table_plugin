@@ -13,3 +13,5 @@ desktop.ini
 1688_parsed_*.xlsx
 ~$*.xlsx
 *.zip
+
+.superpowers/
