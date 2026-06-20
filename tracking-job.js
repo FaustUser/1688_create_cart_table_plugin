@@ -14,6 +14,7 @@
       index: 0,
       currentOrder: "",
       trackingByOrder: {},
+      shipmentDataByOrder: {},
       found: 0,
       empty: 0,
       remaining: uniqueOrders.length,
@@ -29,14 +30,22 @@
   }
 
   function completeOrder(state, order, trackingNumbers) {
-    const values = [...new Set((trackingNumbers || []).map(String).map((x) => x.trim()).filter(Boolean))];
+    const items = trackingNumbers || [];
+    const isShipmentData = items.some((item) => item && typeof item === "object");
+    const values = isShipmentData
+      ? [...new Set(items.map((item) => String(item.trackingNumber || "").trim()).filter(Boolean))]
+      : [...new Set(items.map(String).map((x) => x.trim()).filter(Boolean))];
     const trackingByOrder = { ...state.trackingByOrder, [order]: values };
+    const shipmentDataByOrder = isShipmentData
+      ? { ...state.shipmentDataByOrder, [order]: items }
+      : state.shipmentDataByOrder;
     const processed = Math.min(state.orders.length, state.index + 1);
     const remaining = Math.max(0, state.orders.length - processed);
     return {
       ...state,
       index: processed,
       trackingByOrder,
+      shipmentDataByOrder,
       found: state.found + (values.length ? 1 : 0),
       empty: state.empty + (values.length ? 0 : 1),
       remaining,

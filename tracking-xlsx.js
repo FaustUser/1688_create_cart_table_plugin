@@ -2,6 +2,12 @@
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
+  function getMatcher() {
+    if (root.WB1688TrackingMatcher) return root.WB1688TrackingMatcher;
+    if (typeof require !== "undefined") return require("./tracking-matcher.js");
+    return null;
+  }
+
   function xmlEscape(value) {
     return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
@@ -41,8 +47,15 @@
     const cells = parseCells(header.xml, sharedStrings);
     const order = cells.find((c) => c.value.trim() === "Номер заказа");
     const tracking = cells.find((c) => c.value.trim() === "Трек номер");
+    const link = cells.find((c) => c.value.trim() === "Ссылка");
+    const title = cells.find((c) => c.value.trim() === "Название на 1688");
     if (!order) throw new Error("Не найден столбец «Номер заказа».");
-    return { orderCol: order.col, trackingCol: tracking?.col ?? null };
+    return {
+      orderCol: order.col,
+      trackingCol: tracking?.col ?? null,
+      linkCol: link?.col ?? null,
+      titleCol: title?.col ?? null
+    };
   }
   function extractOrderNumbersFromSheetXml(xml, sharedStrings = []) {
     const { orderCol } = findColumns(xml, sharedStrings);
@@ -94,7 +107,7 @@
     });
   }
   function enrichSheetXml(xml, sharedStrings = [], trackingByOrder = {}) {
-    const { orderCol, trackingCol } = findColumns(xml, sharedStrings);
+    const { orderCol, trackingCol, linkCol, titleCol } = findColumns(xml, sharedStrings);
     const insert = trackingCol == null;
     const targetCol = insert ? orderCol + 1 : trackingCol;
     let output = String(xml);
@@ -102,6 +115,8 @@
     for (const row of rows) {
       const cells = parseCells(row.xml, sharedStrings);
       const order = cells.find((c) => c.col === orderCol)?.value.trim() || "";
+      const link = linkCol == null ? "" : cells.find((c) => c.col === linkCol)?.value.trim() || "";
+      const title = titleCol == null ? "" : cells.find((c) => c.col === titleCol)?.value.trim() || "";
       const style = (cells.find((c) => c.col === orderCol)?.xml.match(/\bs="([^"]+)"/) || [,""])[1];
       let newCells = cells.filter((c) => c.col !== targetCol || insert);
       if (insert) newCells = newCells.map((c) => {
@@ -109,7 +124,14 @@
         return { ...c, outCol, out: rewriteCell(c.xml, outCol, targetCol) };
       });
       else newCells = newCells.map((c) => ({ ...c, outCol: c.col, out: c.xml }));
-      const value = row.row === 1 ? "Трек номер" : (trackingByOrder[order] || []).join("\n");
+      let rowTracks = trackingByOrder[order] || [];
+      if (trackingByOrder.shipmentDataByOrder) {
+        const matcher = getMatcher();
+        rowTracks = matcher
+          ? matcher.matchTrackingForRow({ link, title }, trackingByOrder.shipmentDataByOrder[order] || [])
+          : [];
+      }
+      const value = row.row === 1 ? "Трек номер" : rowTracks.join("\n");
       newCells.push({ col: targetCol, outCol: targetCol, out: makeInlineCell(targetCol, row.row, value, style) });
       newCells.sort((a, b) => a.outCol - b.outCol);
       const inner = newCells.map((c) => c.out).join("");

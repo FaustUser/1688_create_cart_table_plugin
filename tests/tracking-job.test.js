@@ -26,3 +26,17 @@ test("cancels without marking job completed", () => {
   assert.equal(state.status, "cancelled");
   assert.equal(state.remaining, 1);
 });
+
+test("stores shipment records per order", () => {
+  let state = createTrackingJob("orders.xlsx", ["512"]);
+  state = startOrder(state, 0);
+  state = completeOrder(state, "512", [{
+    trackingNumber: "TRACK-1",
+    products: [{ offerId: "100", title: "Товар" }]
+  }]);
+  assert.deepEqual(state.shipmentDataByOrder["512"], [{
+    trackingNumber: "TRACK-1",
+    products: [{ offerId: "100", title: "Товар" }]
+  }]);
+  assert.equal(state.found, 1);
+});

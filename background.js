@@ -1,4 +1,4 @@
-importScripts("tracking-job.js", "tracking-xlsx.js");
+importScripts("tracking-job.js", "tracking-matcher.js", "tracking-xlsx.js");
 
 const TRACKING_STATE_KEY = "wb1688TrackingJob";
 let processingJob = false;
@@ -51,8 +51,8 @@ async function collectOrderTracking(order, state) {
     await publishJob(state);
     await waitForTabComplete(tabId);
     const response = await chrome.tabs.sendMessage(tabId, { type: "WB_1688_COLLECT_TRACKING", timeoutMs: 15000 });
-    if (response?.diagnostic && !(response.trackingNumbers || []).length) console.info(`[1688 tracking ${order}]`, response.diagnostic);
-    return response?.trackingNumbers || [];
+    if (response?.diagnostic && !(response.shipments || []).length) console.info(`[1688 tracking ${order}]`, response.diagnostic);
+    return response?.shipments || [];
   } catch (error) {
     console.warn(`[1688 tracking ${order}]`, error);
     return [];
@@ -62,7 +62,10 @@ async function collectOrderTracking(order, state) {
 }
 
 async function downloadResult(state) {
-  const output = await WB1688TrackingXlsx.enrichTrackingWorkbook(base64ToBytes(state.sourceBase64), state.trackingByOrder);
+  const trackingSource = state.shipmentDataByOrder && Object.keys(state.shipmentDataByOrder).length
+    ? { shipmentDataByOrder: state.shipmentDataByOrder }
+    : state.trackingByOrder;
+  const output = await WB1688TrackingXlsx.enrichTrackingWorkbook(base64ToBytes(state.sourceBase64), trackingSource);
   const stem = state.fileName.replace(/\.(xlsx|xlsm)$/i, "");
   const offscreenUrl = chrome.runtime.getURL("offscreen.html");
   const contexts = chrome.runtime.getContexts
@@ -101,10 +104,10 @@ async function processTrackingJob() {
       state = WB1688TrackingJob.startOrder(state, index);
       await publishJob(state);
       const order = state.orders[index];
-      const trackingNumbers = await collectOrderTracking(order, state);
+      const shipments = await collectOrderTracking(order, state);
       state = await getStoredJob();
       if (!state || ["cancelled", "cancelling"].includes(state.status)) return;
-      state = WB1688TrackingJob.completeOrder(state, order, trackingNumbers);
+      state = WB1688TrackingJob.completeOrder(state, order, shipments);
       await publishJob(state);
     }
     state = await getStoredJob();

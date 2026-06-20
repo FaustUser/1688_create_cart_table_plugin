@@ -547,15 +547,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg?.type === "WB_1688_COLLECT_TRACKING") {
         const timeoutMs = Math.max(1000, Number(msg.timeoutMs || 15000));
         const started = Date.now();
-        let trackingNumbers = [];
+        let shipments = [];
         while (Date.now() - started < timeoutMs) {
-          trackingNumbers = WB1688TrackingParser.extractTrackingNumbers(document);
-          if (trackingNumbers.length) break;
+          shipments = WB1688TrackingParser.extractShipments(document);
+          if (shipments.length) break;
           await sleep(500);
         }
         const pageText = normalizeText(document.body?.innerText || "");
-        const diagnostic = trackingNumbers.length ? "" : pageText.slice(0, 1200);
-        sendResponse({ ok: true, trackingNumbers, diagnostic });
+        const diagnostic = shipments.length ? "" : pageText.slice(0, 1200);
+        sendResponse({ ok: true, shipments, diagnostic });
         return;
       }
 

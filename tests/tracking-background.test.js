@@ -18,6 +18,8 @@ test("background persists state and manages one hidden tab", () => {
   assert.match(source, /chrome\.tabs\.create\(\{[^}]*active:\s*false/);
   assert.match(source, /chrome\.tabs\.remove/);
   assert.match(source, /WB_1688_COLLECT_TRACKING/);
+  assert.match(source, /response\?\.shipments/);
+  assert.match(source, /shipmentDataByOrder/);
 });
 
 test("manifest grants background job permissions and scripts", () => {
