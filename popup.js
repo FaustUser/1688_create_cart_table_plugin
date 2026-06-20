@@ -1123,7 +1123,8 @@ trackingFileEl.addEventListener("change", async () => {
       type: "WB_1688_TRACKING_START",
       fileName: file.name,
       orders: inspection.orders,
-      sourceBase64: trackingBytesToBase64(bytes)
+      sourceBase64: trackingBytesToBase64(bytes),
+      productsByOrder: inspection.productsByOrder
     });
     if (!response?.ok) throw new Error(response?.error || "Не удалось запустить обработку.");
     renderTrackingState(response.state);

@@ -62,7 +62,7 @@
 
   function extractStrictTrackingNumber(text) {
     const source = String(text || "");
-    const match = source.match(new RegExp(`${LABEL_SOURCE}\\s*[:：]?\\s*([^\\r\\n]+)`, "i"));
+    const match = source.match(new RegExp(`${LABEL_SOURCE}\\s*[:：]?\\s*([A-Za-z0-9-]{6,50})`, "i"));
     const value = cleanValue(match?.[1] || "");
     return /^[A-Za-z0-9-]{6,50}$/.test(value) ? value : "";
   }
@@ -78,12 +78,12 @@
       .replace(/[^\p{L}\p{N}.]+/gu, "");
   }
 
-  function parseShipmentCandidates(candidates) {
+  function parseShipmentCandidates(candidates, expectedProducts = []) {
     const shipments = [];
     for (const candidate of candidates || []) {
       const trackingNumber = extractStrictTrackingNumber(candidate.text);
       if (!trackingNumber) continue;
-      const products = (candidate.products || []).map((product) => {
+      const explicitProducts = (candidate.products || []).map((product) => {
         const title = String(product.title || "").trim();
         return {
           offerId: String(product.offerId || offerIdFromHref(product.href)).trim(),
@@ -91,9 +91,36 @@
           normalizedTitle: normalizeProductTitle(title)
         };
       }).filter((product) => product.offerId || product.normalizedTitle);
+      const candidateText = normalizeProductTitle(candidate.text);
+      const inferredProducts = (expectedProducts || []).filter((product) => {
+        const normalizedTitle = normalizeProductTitle(product.title);
+        return (normalizedTitle.length >= 4 && candidateText.includes(normalizedTitle)) ||
+          (product.offerId && String(candidate.text).includes(String(product.offerId)));
+      }).map((product) => ({
+        offerId: String(product.offerId || offerIdFromHref(product.link)).trim(),
+        title: String(product.title || "").trim(),
+        normalizedTitle: normalizeProductTitle(product.title)
+      }));
+      const products = [...explicitProducts];
+      for (const product of inferredProducts) {
+        if (!products.some((existing) =>
+          (product.offerId && existing.offerId === product.offerId) ||
+          (product.normalizedTitle && existing.normalizedTitle === product.normalizedTitle)
+        )) products.push(product);
+      }
       shipments.push({ trackingNumber, products });
     }
     return shipments;
+  }
+
+  function textShipmentCandidates(text) {
+    const source = String(text || "");
+    const pattern = new RegExp(`${LABEL_SOURCE}\\s*[:：]?\\s*[A-Za-z0-9-]{6,50}`, "gi");
+    const matches = [...source.matchAll(pattern)];
+    return matches.map((match, index) => ({
+      text: source.slice(match.index, matches[index + 1]?.index ?? source.length),
+      products: []
+    }));
   }
 
   function productCandidatesFrom(container) {
@@ -132,20 +159,30 @@
     return products;
   }
 
-  function shipmentContainerFor(labelElement) {
+  function expectedProductsInText(text, expectedProducts) {
+    const normalizedText = normalizeProductTitle(text);
+    return (expectedProducts || []).some((product) => {
+      const normalizedTitle = normalizeProductTitle(product.title);
+      return (normalizedTitle.length >= 4 && normalizedText.includes(normalizedTitle)) ||
+        (product.offerId && String(text).includes(String(product.offerId)));
+    });
+  }
+
+  function shipmentContainerFor(labelElement, expectedProducts = []) {
     let current = labelElement;
     let fallback = null;
     for (let depth = 0; current && depth < 10; depth++, current = current.parentElement) {
       const products = productCandidatesFrom(current);
-      if (!products.length) continue;
-      if (!fallback) fallback = current;
-      const labels = String(current.innerText || current.textContent || "").match(new RegExp(LABEL_SOURCE, "gi")) || [];
-      if (labels.length === 1) return current;
+      const currentText = String(current.innerText || current.textContent || "");
+      const labels = currentText.match(new RegExp(LABEL_SOURCE, "gi")) || [];
+      if (labels.length !== 1) continue;
+      fallback = current;
+      if (products.length || expectedProductsInText(currentText, expectedProducts)) return current;
     }
     return fallback;
   }
 
-  function extractShipments(scope) {
+  function extractShipments(scope, expectedProducts = []) {
     const elements = [];
     collectElements(scope, elements);
     const candidates = [];
@@ -161,7 +198,7 @@
       const labelAndValue = `${ownText}\n${siblingText}`;
       const trackingNumber = extractStrictTrackingNumber(labelAndValue);
       if (!trackingNumber || seen.has(trackingNumber)) continue;
-      const container = shipmentContainerFor(element);
+      const container = shipmentContainerFor(element, expectedProducts);
       if (!container) continue;
       seen.add(trackingNumber);
       candidates.push({
@@ -169,7 +206,12 @@
         products: productCandidatesFrom(container)
       });
     }
-    return parseShipmentCandidates(candidates);
+    const domShipments = parseShipmentCandidates(candidates, expectedProducts);
+    const foundTracks = new Set(domShipments.map((shipment) => shipment.trackingNumber));
+    const bodyText = String(scope?.body?.innerText || scope?.innerText || scope?.textContent || "");
+    const fallback = parseShipmentCandidates(textShipmentCandidates(bodyText), expectedProducts)
+      .filter((shipment) => !foundTracks.has(shipment.trackingNumber));
+    return [...domShipments, ...fallback];
   }
 
   const api = {

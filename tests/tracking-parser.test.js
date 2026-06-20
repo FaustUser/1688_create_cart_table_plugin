@@ -20,6 +20,21 @@ test("extracts only the value from a separate tracking-number sibling", () => {
   assert.equal(extractStrictTrackingNumber("运单号码\n发货时间：\n2026-06-19 16:38:46"), "");
 });
 
+test("builds shipments from raw logistics blocks using expected Excel products", () => {
+  const shipments = parseShipmentCandidates([
+    {
+      text: "物流信息 运单号码 435233621072490 发货时间 2026-06-19 16:38:46 9031【充电式280电机5档调速】入门配",
+      products: []
+    }
+  ], [{
+    offerId: "1020395271677",
+    link: "https://detail.1688.com/offer/1020395271677.html",
+    title: "9031【充电式280电机5档调速】入门配"
+  }]);
+  assert.equal(shipments[0].trackingNumber, "435233621072490");
+  assert.equal(shipments[0].products[0].offerId, "1020395271677");
+});
+
 test("normalizes duplicate values and joins them with line breaks", () => {
   const values = normalizeTrackingNumbers([" SF123 ", "SF123", "LP456"]);
   assert.deepEqual(values, ["SF123", "LP456"]);

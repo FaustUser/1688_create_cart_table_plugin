@@ -4,12 +4,13 @@
     return publicState;
   }
 
-  function createTrackingJob(fileName, orders, sourceBase64 = "") {
+  function createTrackingJob(fileName, orders, sourceBase64 = "", productsByOrder = {}) {
     const uniqueOrders = [...new Set((orders || []).map(String).map((x) => x.trim()).filter(Boolean))];
     return {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       fileName,
       sourceBase64,
+      productsByOrder,
       orders: uniqueOrders,
       index: 0,
       currentOrder: "",

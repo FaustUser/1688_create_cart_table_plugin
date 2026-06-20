@@ -67,6 +67,22 @@
     }
     return result;
   }
+  function extractProductsByOrderFromSheetXml(xml, sharedStrings = []) {
+    const { orderCol, linkCol, titleCol } = findColumns(xml, sharedStrings);
+    const result = {};
+    for (const row of parseRows(xml)) {
+      if (row.row === 1) continue;
+      const cells = parseCells(row.xml, sharedStrings);
+      const order = cells.find((cell) => cell.col === orderCol)?.value.trim() || "";
+      if (!order) continue;
+      const link = linkCol == null ? "" : cells.find((cell) => cell.col === linkCol)?.value.trim() || "";
+      const title = titleCol == null ? "" : cells.find((cell) => cell.col === titleCol)?.value.trim() || "";
+      const offerId = (link.match(/detail\.1688\.com\/offer\/(\d+)\.html/i) || [])[1] || "";
+      if (!offerId && !title) continue;
+      (result[order] ||= []).push({ offerId, link, title });
+    }
+    return result;
+  }
   function shiftRef(ref, insertCol) {
     return String(ref).replace(/\$?([A-Z]+)\$?(\d+)/g, (all, col, row) => {
       const index = colToIndex(col);
@@ -217,7 +233,12 @@
     const files = await unzipEntries(bytes);
     const sheetPath = findProductsSheet(files);
     const shared = parseSharedStrings(decoder.decode(files.get("xl/sharedStrings.xml") || new Uint8Array()));
-    return { orders: extractOrderNumbersFromSheetXml(decoder.decode(files.get(sheetPath)), shared), sheetPath };
+    const sheetXml = decoder.decode(files.get(sheetPath));
+    return {
+      orders: extractOrderNumbersFromSheetXml(sheetXml, shared),
+      productsByOrder: extractProductsByOrderFromSheetXml(sheetXml, shared),
+      sheetPath
+    };
   }
   async function enrichTrackingWorkbook(bytes, trackingByOrder) {
     const files = await unzipEntries(bytes);
@@ -231,7 +252,7 @@
     return zipStore(files);
   }
 
-  const api = { extractOrderNumbersFromSheetXml, enrichSheetXml, shiftDrawingXml, inspectTrackingWorkbook, enrichTrackingWorkbook, zipStore };
+  const api = { extractOrderNumbersFromSheetXml, extractProductsByOrderFromSheetXml, enrichSheetXml, shiftDrawingXml, inspectTrackingWorkbook, enrichTrackingWorkbook, zipStore };
   root.WB1688TrackingXlsx = api;
   if (typeof module !== "undefined") module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

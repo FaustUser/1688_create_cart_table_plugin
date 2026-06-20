@@ -40,3 +40,9 @@ test("stores shipment records per order", () => {
   }]);
   assert.equal(state.found, 1);
 });
+
+test("keeps source product metadata for background parsing", () => {
+  const productsByOrder = { "512": [{ offerId: "100", title: "Товар" }] };
+  const state = createTrackingJob("orders.xlsx", ["512"], "base64", productsByOrder);
+  assert.deepEqual(state.productsByOrder, productsByOrder);
+});

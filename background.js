@@ -50,7 +50,11 @@ async function collectOrderTracking(order, state) {
     state.currentTabId = tabId;
     await publishJob(state);
     await waitForTabComplete(tabId);
-    const response = await chrome.tabs.sendMessage(tabId, { type: "WB_1688_COLLECT_TRACKING", timeoutMs: 15000 });
+    const response = await chrome.tabs.sendMessage(tabId, {
+      type: "WB_1688_COLLECT_TRACKING",
+      timeoutMs: 15000,
+      products: state.productsByOrder?.[order] || []
+    });
     if (response?.diagnostic && !(response.shipments || []).length) console.info(`[1688 tracking ${order}]`, response.diagnostic);
     return response?.shipments || [];
   } catch (error) {
@@ -133,7 +137,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       const current = await getStoredJob();
       if (current && ["idle", "running", "cancelling"].includes(current.status)) throw new Error("Уже выполняется другое задание.");
-      const state = WB1688TrackingJob.createTrackingJob(msg.fileName, msg.orders, msg.sourceBase64);
+      const state = WB1688TrackingJob.createTrackingJob(msg.fileName, msg.orders, msg.sourceBase64, msg.productsByOrder || {});
       await publishJob(state);
       processTrackingJob();
       return { ok: true, state: WB1688TrackingJob.snapshot(state) };

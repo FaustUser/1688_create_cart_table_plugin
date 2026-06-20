@@ -19,4 +19,5 @@ test("popup starts, restores and cancels background tracking job", () => {
   assert.match(js, /WB_1688_TRACKING_GET/);
   assert.match(js, /WB_1688_TRACKING_CANCEL/);
   assert.match(js, /WB_1688_TRACKING_STATE/);
+  assert.match(js, /productsByOrder:\s*inspection\.productsByOrder/);
 });

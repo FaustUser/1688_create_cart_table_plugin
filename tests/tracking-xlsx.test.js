@@ -22,6 +22,23 @@ test("extracts unique order numbers by header", () => {
   assert.deepEqual(extractOrderNumbersFromSheetXml(sheet, []), ["512"]);
 });
 
+test("inspection returns product metadata grouped by order", async () => {
+  const enc = new TextEncoder();
+  const productSheet = `<?xml version="1.0"?><worksheet><sheetData>
+    <row r="1"><c r="A1" t="inlineStr"><is><t>Номер заказа</t></is></c><c r="B1" t="inlineStr"><is><t>Ссылка</t></is></c><c r="C1" t="inlineStr"><is><t>Название на 1688</t></is></c></row>
+    <row r="2"><c r="A2" t="inlineStr"><is><t>512</t></is></c><c r="B2" t="inlineStr"><is><t>https://detail.1688.com/offer/100.html</t></is></c><c r="C2" t="inlineStr"><is><t>Товар 100</t></is></c></row>
+  </sheetData></worksheet>`;
+  const files = new Map([
+    ["xl/workbook.xml", enc.encode(`<workbook><sheets><sheet name="Товары" sheetId="1" r:id="rId1"/></sheets></workbook>`)],
+    ["xl/_rels/workbook.xml.rels", enc.encode(`<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`)],
+    ["xl/worksheets/sheet1.xml", enc.encode(productSheet)]
+  ]);
+  const inspection = await inspectTrackingWorkbook(zipStore(files));
+  assert.deepEqual(inspection.productsByOrder, {
+    "512": [{ offerId: "100", link: "https://detail.1688.com/offer/100.html", title: "Товар 100" }]
+  });
+});
+
 test("inserts tracking column and shifts cells and formulas", () => {
   const result = enrichSheetXml(sheet, [], { "512": ["SF1", "LP2"] });
   assert.match(result.xml, /<t>Трек номер<\/t>/);

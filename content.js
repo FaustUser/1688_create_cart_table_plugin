@@ -549,7 +549,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const started = Date.now();
         let shipments = [];
         while (Date.now() - started < timeoutMs) {
-          shipments = WB1688TrackingParser.extractShipments(document);
+          shipments = WB1688TrackingParser.extractShipments(document, msg.products || []);
           if (shipments.length) break;
           await sleep(500);
         }
