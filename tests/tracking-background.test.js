@@ -17,10 +17,16 @@ test("background persists state and manages one hidden tab", () => {
   assert.match(source, /chrome\.storage\.local/);
   assert.match(source, /chrome\.tabs\.create\(\{[^}]*active:\s*false/);
   assert.match(source, /chrome\.tabs\.remove/);
-  assert.match(source, /WB_1688_COLLECT_TRACKING/);
-  assert.match(source, /response\?\.shipments/);
+  assert.match(source, /collectLogisticsFromMainWorld/);
   assert.match(source, /shipmentDataByOrder/);
-  assert.match(source, /products:\s*state\.productsByOrder/);
+});
+
+test("background reads logistics component data in the page main world", () => {
+  assert.match(source, /chrome\.scripting\.executeScript/);
+  assert.match(source, /world:\s*"MAIN"/);
+  assert.match(source, /logistics-info-track/);
+  assert.match(source, /logistics-info-product/);
+  assert.match(source, /shipmentFromComponentData/);
 });
 
 test("manifest grants background job permissions and scripts", () => {

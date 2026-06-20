@@ -78,6 +78,57 @@
       .replace(/[^\p{L}\p{N}.]+/gu, "");
   }
 
+  function shipmentFromComponentData(trackData, productData) {
+    const trackingNumber = normalizeTrackingNumbers([
+      trackData?.mailNo,
+      trackData?.logisticsBillNo,
+      trackData?.noLogisticsBillNo,
+      trackData?.logisticsExternalNo
+    ])[0] || "";
+    if (!trackingNumber) return null;
+
+    const products = (Array.isArray(productData) ? productData : []).map((product) => {
+      const title = String(
+        product?.name ||
+        product?.subject ||
+        product?.productName ||
+        product?.title ||
+        ""
+      ).trim();
+      const href = String(product?.offerUrl || product?.detailUrl || "").trim();
+      return {
+        orderEntryId: String(product?.orderEntryId || "").trim(),
+        offerId: String(product?.offerId || product?.offerID || offerIdFromHref(href)).trim(),
+        title,
+        normalizedTitle: normalizeProductTitle(title)
+      };
+    }).filter((product) => product.offerId || product.normalizedTitle);
+
+    return { trackingNumber, products };
+  }
+
+  function extractComponentShipments(elements) {
+    const tracks = (elements || []).filter((element) =>
+      String(element?.tagName || "").toLowerCase() === "logistics-info-track"
+    );
+    const products = (elements || []).filter((element) =>
+      String(element?.tagName || "").toLowerCase() === "logistics-info-product"
+    );
+    const shipments = [];
+    const seen = new Set();
+
+    tracks.forEach((trackElement, index) => {
+      const productElement =
+        trackElement.parentElement?.querySelector?.("logistics-info-product") ||
+        products[index];
+      const shipment = shipmentFromComponentData(trackElement.data, productElement?.data);
+      if (!shipment || seen.has(shipment.trackingNumber)) return;
+      seen.add(shipment.trackingNumber);
+      shipments.push(shipment);
+    });
+    return shipments;
+  }
+
   function parseShipmentCandidates(candidates, expectedProducts = []) {
     const shipments = [];
     for (const candidate of candidates || []) {
@@ -208,6 +259,10 @@
   function extractShipments(scope, expectedProducts = []) {
     const elements = [];
     collectElements(scope, elements);
+    const componentShipments = extractComponentShipments(elements);
+    if (componentShipments.some((shipment) => shipment.products.length)) {
+      return componentShipments;
+    }
     const candidates = [];
     const seen = new Set();
     for (const element of elements) {
@@ -243,6 +298,8 @@
     normalizeTrackingNumbers,
     joinTrackingNumbers,
     parseShipmentCandidates,
+    shipmentFromComponentData,
+    extractComponentShipments,
     extractStrictTrackingNumber,
     extractShipments,
     parseShipmentsFromText

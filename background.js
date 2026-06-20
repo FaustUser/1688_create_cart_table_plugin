@@ -1,4 +1,4 @@
-importScripts("tracking-job.js", "tracking-matcher.js", "tracking-xlsx.js");
+importScripts("tracking-parser.js", "tracking-job.js", "tracking-matcher.js", "tracking-xlsx.js");
 
 const TRACKING_STATE_KEY = "wb1688TrackingJob";
 let processingJob = false;
@@ -41,6 +41,73 @@ function waitForTabComplete(tabId, timeoutMs = 25000) {
   });
 }
 
+function readLogisticsComponentsInPage() {
+  const elements = [];
+  const collect = (scope) => {
+    if (!scope?.querySelectorAll) return;
+    for (const element of scope.querySelectorAll("*")) {
+      elements.push(element);
+      if (element.shadowRoot) collect(element.shadowRoot);
+    }
+  };
+  collect(document);
+
+  const tracks = elements.filter((element) =>
+    String(element.tagName || "").toLowerCase() === "logistics-info-track"
+  );
+  const products = elements.filter((element) =>
+    String(element.tagName || "").toLowerCase() === "logistics-info-product"
+  );
+
+  return tracks.map((trackElement, index) => {
+    const productElement =
+      trackElement.parentElement?.querySelector?.("logistics-info-product") ||
+      products[index];
+    const track = trackElement.data || {};
+    const productItems = Array.isArray(productElement?.data) ? productElement.data : [];
+    return {
+      trackData: {
+        mailNo: track.mailNo,
+        logisticsBillNo: track.logisticsBillNo,
+        noLogisticsBillNo: track.noLogisticsBillNo,
+        logisticsExternalNo: track.logisticsExternalNo
+      },
+      productData: productItems.map((product) => ({
+        orderEntryId: product?.orderEntryId,
+        offerId: product?.offerId,
+        offerID: product?.offerID,
+        name: product?.name,
+        subject: product?.subject,
+        productName: product?.productName,
+        title: product?.title,
+        offerUrl: product?.offerUrl,
+        detailUrl: product?.detailUrl
+      }))
+    };
+  });
+}
+
+async function collectLogisticsFromMainWorld(tabId, timeoutMs = 15000) {
+  const started = Date.now();
+  let shipments = [];
+  while (Date.now() - started < timeoutMs) {
+    const execution = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: readLogisticsComponentsInPage
+    });
+    const componentData = execution?.[0]?.result || [];
+    shipments = componentData
+      .map(({ trackData, productData }) =>
+        WB1688TrackingParser.shipmentFromComponentData(trackData, productData)
+      )
+      .filter(Boolean);
+    if (shipments.length && shipments.every((shipment) => shipment.products.length)) return shipments;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return shipments;
+}
+
 async function collectOrderTracking(order, state) {
   let tabId = null;
   try {
@@ -50,13 +117,7 @@ async function collectOrderTracking(order, state) {
     state.currentTabId = tabId;
     await publishJob(state);
     await waitForTabComplete(tabId);
-    const response = await chrome.tabs.sendMessage(tabId, {
-      type: "WB_1688_COLLECT_TRACKING",
-      timeoutMs: 15000,
-      products: state.productsByOrder?.[order] || []
-    });
-    if (response?.diagnostic && !(response.shipments || []).length) console.info(`[1688 tracking ${order}]`, response.diagnostic);
-    return response?.shipments || [];
+    return await collectLogisticsFromMainWorld(tabId);
   } catch (error) {
     console.warn(`[1688 tracking ${order}]`, error);
     return [];

@@ -550,7 +550,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         let shipments = [];
         while (Date.now() - started < timeoutMs) {
           shipments = WB1688TrackingParser.extractShipments(document, msg.products || []);
-          if (shipments.length) break;
+          if (shipments.length && shipments.every((shipment) => shipment.products.length)) break;
           await sleep(500);
         }
         const pageText = normalizeText(document.body?.innerText || "");

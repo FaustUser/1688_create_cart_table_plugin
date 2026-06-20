@@ -8,6 +8,6 @@ test("content script collects tracking numbers with bounded polling", () => {
   assert.match(source, /WB_1688_COLLECT_TRACKING/);
   assert.match(source, /WB1688TrackingParser\.extractShipments/);
   assert.match(source, /msg\.products/);
-  assert.match(source, /\bshipments\b/);
+  assert.match(source, /shipments\.every\(\(shipment\) => shipment\.products\.length\)/);
   assert.match(source, /diagnostic/);
 });
