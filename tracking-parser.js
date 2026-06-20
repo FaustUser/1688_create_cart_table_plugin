@@ -117,10 +117,33 @@
     const source = String(text || "");
     const pattern = new RegExp(`${LABEL_SOURCE}\\s*[:：]?\\s*[A-Za-z0-9-]{6,50}`, "gi");
     const matches = [...source.matchAll(pattern)];
-    return matches.map((match, index) => ({
-      text: source.slice(match.index, matches[index + 1]?.index ?? source.length),
-      products: []
-    }));
+    return matches.map((match, index) => {
+      const previousEnd = index === 0 ? 0 : matches[index - 1].index + matches[index - 1][0].length;
+      const nextStart = matches[index + 1]?.index ?? source.length;
+      const start = index === 0 ? 0 : Math.floor((previousEnd + match.index) / 2);
+      const end = index === matches.length - 1
+        ? source.length
+        : Math.floor((match.index + match[0].length + nextStart) / 2);
+      return { text: source.slice(start, end), products: [] };
+    });
+  }
+
+  function parseShipmentsFromText(text, expectedProducts = []) {
+    const source = String(text || "");
+    const candidates = textShipmentCandidates(source);
+    const pattern = new RegExp(`${LABEL_SOURCE}\\s*[:：]?\\s*[A-Za-z0-9-]{6,50}`, "gi");
+    const trackMatches = [...source.matchAll(pattern)];
+    for (const product of expectedProducts || []) {
+      const title = String(product.title || "").trim();
+      const offerId = String(product.offerId || offerIdFromHref(product.link)).trim();
+      const positions = [title ? source.indexOf(title) : -1, offerId ? source.indexOf(offerId) : -1].filter((index) => index >= 0);
+      if (!positions.length || !trackMatches.length) continue;
+      const productIndex = Math.min(...positions);
+      let shipmentIndex = trackMatches.findIndex((match) => match.index >= productIndex);
+      if (shipmentIndex < 0) shipmentIndex = trackMatches.length - 1;
+      (candidates[shipmentIndex].products ||= []).push(product);
+    }
+    return parseShipmentCandidates(candidates, expectedProducts);
   }
 
   function productCandidatesFrom(container) {
@@ -209,7 +232,7 @@
     const domShipments = parseShipmentCandidates(candidates, expectedProducts);
     const foundTracks = new Set(domShipments.map((shipment) => shipment.trackingNumber));
     const bodyText = String(scope?.body?.innerText || scope?.innerText || scope?.textContent || "");
-    const fallback = parseShipmentCandidates(textShipmentCandidates(bodyText), expectedProducts)
+    const fallback = parseShipmentsFromText(bodyText, expectedProducts)
       .filter((shipment) => !foundTracks.has(shipment.trackingNumber));
     return [...domShipments, ...fallback];
   }
@@ -221,7 +244,8 @@
     joinTrackingNumbers,
     parseShipmentCandidates,
     extractStrictTrackingNumber,
-    extractShipments
+    extractShipments,
+    parseShipmentsFromText
   };
   root.WB1688TrackingParser = api;
   if (typeof module !== "undefined") module.exports = api;

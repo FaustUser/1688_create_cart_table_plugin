@@ -5,7 +5,8 @@ const {
   normalizeTrackingNumbers,
   joinTrackingNumbers,
   parseShipmentCandidates,
-  extractStrictTrackingNumber
+  extractStrictTrackingNumber,
+  parseShipmentsFromText
 } = require("../tracking-parser.js");
 
 test("extracts Chinese and Russian labeled tracking numbers", () => {
@@ -33,6 +34,24 @@ test("builds shipments from raw logistics blocks using expected Excel products",
   }]);
   assert.equal(shipments[0].trackingNumber, "435233621072490");
   assert.equal(shipments[0].products[0].offerId, "1020395271677");
+});
+
+test("associates product text that appears before the tracking label", () => {
+  const shipments = parseShipmentsFromText(
+    "9031【充电式280电机5档调速】入门配 发货信息 运单号码 435233621072490 发货时间 2026-06-19 16:38:46 " +
+    "经济版7.8Vf全能套+30件批头套 发货信息 运单号码 435233604737349 发货时间 2026-06-19 16:20:29",
+    [
+      { offerId: "1020395271677", title: "9031【充电式280电机5档调速】入门配" },
+      { offerId: "719746403487", title: "经济版7.8Vf全能套+30件批头套" }
+    ]
+  );
+  assert.deepEqual(shipments.map((shipment) => ({
+    track: shipment.trackingNumber,
+    offerIds: shipment.products.map((product) => product.offerId)
+  })), [
+    { track: "435233621072490", offerIds: ["1020395271677"] },
+    { track: "435233604737349", offerIds: ["719746403487"] }
+  ]);
 });
 
 test("normalizes duplicate values and joins them with line breaks", () => {

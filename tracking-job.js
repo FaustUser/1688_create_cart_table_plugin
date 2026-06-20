@@ -33,6 +33,9 @@
   function completeOrder(state, order, trackingNumbers) {
     const items = trackingNumbers || [];
     const isShipmentData = items.some((item) => item && typeof item === "object");
+    const matchedShipments = isShipmentData
+      ? items.filter((item) => String(item.trackingNumber || "").trim() && (item.products || []).length)
+      : [];
     const values = isShipmentData
       ? [...new Set(items.map((item) => String(item.trackingNumber || "").trim()).filter(Boolean))]
       : [...new Set(items.map(String).map((x) => x.trim()).filter(Boolean))];
@@ -47,8 +50,8 @@
       index: processed,
       trackingByOrder,
       shipmentDataByOrder,
-      found: state.found + (values.length ? 1 : 0),
-      empty: state.empty + (values.length ? 0 : 1),
+      found: state.found + (isShipmentData ? (matchedShipments.length ? 1 : 0) : (values.length ? 1 : 0)),
+      empty: state.empty + (isShipmentData ? (matchedShipments.length ? 0 : 1) : (values.length ? 0 : 1)),
       remaining,
       progress: state.orders.length ? Math.round(processed * 100 / state.orders.length) : 100,
       status: remaining ? "running" : "completed",

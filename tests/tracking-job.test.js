@@ -46,3 +46,11 @@ test("keeps source product metadata for background parsing", () => {
   const state = createTrackingJob("orders.xlsx", ["512"], "base64", productsByOrder);
   assert.deepEqual(state.productsByOrder, productsByOrder);
 });
+
+test("does not count a shipment without matched products as found", () => {
+  let state = createTrackingJob("orders.xlsx", ["512"]);
+  state = startOrder(state, 0);
+  state = completeOrder(state, "512", [{ trackingNumber: "TRACK-1", products: [] }]);
+  assert.equal(state.found, 0);
+  assert.equal(state.empty, 1);
+});
