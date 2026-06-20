@@ -5,41 +5,29 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>1688 → Excel</title>
 <style>
-body{font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:12px;width:410px;background:#0f0f10;color:#e9e9ea}
-h1{font-size:14px;margin:0 0 10px 0;font-weight:700}
-.card{border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px;background:rgba(255,255,255,.04)}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.col{display:flex;flex-direction:column;gap:6px}
-button{cursor:pointer;border:0;border-radius:10px;padding:10px 12px;background:#2d6cdf;color:#fff;font-weight:700}
-button.secondary{background:rgba(255,255,255,.12)}
-button:disabled{opacity:.5;cursor:not-allowed}
-.muted{color:rgba(233,233,234,.7);font-size:12px}
-.log{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px;color:rgba(233,233,234,.85);margin-top:8px}
-.ok{color:#7CFC00}
-.err{color:#ff6b6b}
-.divider{height:10px}
-label{display:flex;align-items:center;gap:8px;font-size:12px;color:rgba(233,233,234,.8)}
-input[type="number"]{width:90px;border-radius:8px;border:1px solid rgba(255,255,255,.16);background:rgba(0,0,0,.25);color:#fff;padding:6px 8px}
-input[type="radio"]{accent-color:#2d6cdf}
-.progress{display:none;flex-direction:column;gap:6px;padding:8px 10px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.03)}
-.progress.visible{display:flex}
-.progress-text{font-size:12px;color:rgba(233,233,234,.85)}
-.progress-track{height:8px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden}
-.progress-fill{height:100%;width:0;background:linear-gradient(90deg,#2d6cdf,#5da2ff);transition:width .18s ease}
+:root{--bg:#0e1014;--line:#303640;--muted:#9ba4b2;--text:#f3f5f7;--blue:#4387f7;--green:#74d69a;--red:#ff7272}
+*{box-sizing:border-box}body{font:14px/1.4 "Segoe UI Variable","Segoe UI",sans-serif;margin:0;padding:14px;width:430px;background:radial-gradient(circle at 90% 0,#1c2c43 0,transparent 42%),var(--bg);color:var(--text)}
+h1{font-size:17px;margin:0 0 12px}.stack{display:grid;gap:10px}.card{border:1px solid var(--line);border-radius:14px;padding:13px;background:linear-gradient(145deg,rgba(255,255,255,.045),rgba(255,255,255,.018));box-shadow:0 12px 28px rgba(0,0,0,.18)}
+.card-title{font-weight:750;font-size:14px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.col{display:flex;flex-direction:column;gap:7px}
+button{cursor:pointer;border:0;border-radius:9px;padding:9px 11px;background:var(--blue);color:white;font-weight:700}button.secondary{background:#303640}button.danger{background:#4a292d;color:#ffb3b3}button:disabled{opacity:.5;cursor:not-allowed}
+.muted{color:var(--muted);font-size:12px}.log{max-height:90px;overflow:auto;white-space:pre-wrap;font:11px/1.35 Consolas,monospace;color:#c5cad1}.ok{color:var(--green)}.err{color:var(--red)}
+label{display:flex;align-items:center;gap:6px;font-size:12px;color:#cbd0d7}input[type=number]{width:76px;border-radius:7px;border:1px solid var(--line);background:#0f1217;color:white;padding:5px 7px}input[type=radio]{accent-color:var(--blue)}
+.progress{display:none;gap:7px}.progress.visible{display:grid}.progress-track{height:8px;border-radius:99px;background:#292e37;overflow:hidden}.progress-fill{height:100%;width:0;background:linear-gradient(90deg,#397cf6,#70b5ff);transition:width .2s ease}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.stat{background:#20242b;border-radius:8px;padding:7px;text-align:center}.stat b{display:block;font-size:15px}.stat small{color:var(--muted)}.file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 </head>
 <body>
 <h1>1688 → Excel</h1>
+<main class="stack">
 <div class="card">
   <div class="col">
-    <div class="muted">Авто-режим: раскрываем заказы, скроллим страницу и собираем Excel.</div>
-    <div class="divider"></div>
+    <div class="card-title">Собрать новый файл</div>
+    <div class="muted">Товары и заказы с текущей страницы 1688.</div>
     <div class="row">
       <label>Шаг скролла, px: <input id="step" type="number" value="900"></label>
       <label>Пауза, мс: <input id="wait" type="number" value="650"></label>
       <label>Картинка, px: <input id="img" type="number" value="200"></label>
     </div>
-    <div class="divider"></div>
     <div class="col">
       <div class="muted">Корзина: какие товары собирать</div>
       <div class="row">
@@ -47,20 +35,36 @@ input[type="radio"]{accent-color:#2d6cdf}
         <label><input type="radio" name="cartScope" value="selected"> Только отмеченные</label>
       </div>
     </div>
-    <div class="row">
-      <button id="auto">Авто: раскрыть+скролл+Excel</button>
-    </div>
-    <div class="divider"></div>
+    <button id="auto">Собрать Excel</button>
     <div id="progress" class="progress" aria-live="polite">
       <div id="progressText" class="progress-text">Подготовка…</div>
       <div class="progress-track">
         <div id="progressFill" class="progress-fill"></div>
       </div>
     </div>
-    <div class="divider"></div>
-    <div id="log" class="log"></div>
   </div>
 </div>
+<section class="card col">
+  <div class="card-title">Добавить трек-номера</div>
+  <div class="muted">Загрузите Excel, созданный этим плагином. Обработка продолжится при закрытом popup.</div>
+  <input id="trackingFile" type="file" accept=".xlsx,.xlsm" hidden>
+  <button id="trackingChoose" class="secondary">Выбрать Excel</button>
+  <div id="trackingFileName" class="muted file-name"></div>
+  <div id="trackingProgress" class="progress" aria-live="polite">
+    <div class="row" style="justify-content:space-between"><span id="trackingProgressText">Обработано 0 из 0</span><b id="trackingPercent">0%</b></div>
+    <div class="progress-track"><div id="trackingProgressFill" class="progress-fill"></div></div>
+    <div id="trackingCurrentOrder" class="muted"></div>
+    <div class="stats">
+      <div class="stat"><b id="trackingFound">0</b><small>с треками</small></div>
+      <div class="stat"><b id="trackingEmpty">0</b><small>пустые</small></div>
+      <div class="stat"><b id="trackingRemaining">0</b><small>осталось</small></div>
+    </div>
+    <button id="trackingStop" class="danger">Остановить</button>
+  </div>
+</section>
+<div id="log" class="log"></div>
+</main>
+<script src="tracking-xlsx.js"></script>
 <script src="xlsx-sheet-view.js"></script>
 <script src="popup.js"></script>
 </body>

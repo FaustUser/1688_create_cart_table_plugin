@@ -544,6 +544,21 @@ function collectAllRows(cartSelectionMode = "all"){
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     try {
+      if (msg?.type === "WB_1688_COLLECT_TRACKING") {
+        const timeoutMs = Math.max(1000, Number(msg.timeoutMs || 15000));
+        const started = Date.now();
+        let trackingNumbers = [];
+        while (Date.now() - started < timeoutMs) {
+          trackingNumbers = WB1688TrackingParser.extractTrackingNumbers(document);
+          if (trackingNumbers.length) break;
+          await sleep(500);
+        }
+        const pageText = normalizeText(document.body?.innerText || "");
+        const diagnostic = trackingNumbers.length ? "" : pageText.slice(0, 1200);
+        sendResponse({ ok: true, trackingNumbers, diagnostic });
+        return;
+      }
+
       const step = Number(msg?.step || 900); // шаг скролла для авто‑режима
       const wait = Number(msg?.wait || 650); // пауза между шагами
       const cartSelectionMode = normalizeCartSelectionMode(msg?.cartSelectionMode);

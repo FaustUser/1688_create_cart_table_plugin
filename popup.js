@@ -70,6 +70,10 @@ function isMissingReceiverError(error) {
 async function ensureContentScript(tabId) {
   await chrome.scripting.executeScript({
     target: { tabId, frameIds: [0] },
+    files: ["tracking-parser.js"]
+  });
+  await chrome.scripting.executeScript({
+    target: { tabId, frameIds: [0] },
     files: ["order-metadata.js", "content.js"]
   });
 }
@@ -1051,3 +1055,97 @@ async function runTabExport(type, label) {
 autoBtn.addEventListener("click", async () => {
   await runTabExport("WB_1688_AUTO", "Авто-режим…");
 });
+
+// ---------- Обогащение существующего Excel трек-номерами ----------
+const trackingFileEl = $("trackingFile");
+const trackingChooseBtn = $("trackingChoose");
+const trackingFileNameEl = $("trackingFileName");
+const trackingProgressEl = $("trackingProgress");
+const trackingProgressTextEl = $("trackingProgressText");
+const trackingPercentEl = $("trackingPercent");
+const trackingProgressFillEl = $("trackingProgressFill");
+const trackingCurrentOrderEl = $("trackingCurrentOrder");
+const trackingFoundEl = $("trackingFound");
+const trackingEmptyEl = $("trackingEmpty");
+const trackingRemainingEl = $("trackingRemaining");
+const trackingStopBtn = $("trackingStop");
+
+function trackingBytesToBase64(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function renderTrackingState(state) {
+  if (!state) {
+    trackingProgressEl.classList.remove("visible");
+    trackingChooseBtn.disabled = false;
+    return;
+  }
+  const total = state.orders?.length || 0;
+  const processed = Math.max(0, total - Number(state.remaining || 0));
+  trackingFileNameEl.textContent = state.fileName || "";
+  trackingProgressEl.classList.add("visible");
+  trackingProgressTextEl.textContent = state.status === "failed"
+    ? `Ошибка: ${state.error || "не удалось создать файл"}`
+    : state.status === "cancelled"
+      ? "Обработка остановлена"
+      : state.status === "completed"
+        ? `Готово: обработано ${total} заказов`
+        : `Обработано ${processed} из ${total} заказов`;
+  trackingPercentEl.textContent = `${Number(state.progress || 0)}%`;
+  trackingProgressFillEl.style.width = `${Number(state.progress || 0)}%`;
+  trackingCurrentOrderEl.textContent = state.currentOrder ? `Сейчас: ${state.currentOrder}` : "";
+  trackingFoundEl.textContent = String(state.found || 0);
+  trackingEmptyEl.textContent = String(state.empty || 0);
+  trackingRemainingEl.textContent = String(state.remaining || 0);
+  const running = ["idle", "running", "cancelling"].includes(state.status);
+  trackingChooseBtn.disabled = running;
+  trackingStopBtn.disabled = !running || state.status === "cancelling";
+  trackingStopBtn.style.display = running ? "" : "none";
+}
+
+trackingChooseBtn.addEventListener("click", () => trackingFileEl.click());
+
+trackingFileEl.addEventListener("change", async () => {
+  const file = trackingFileEl.files?.[0];
+  if (!file) return;
+  trackingFileNameEl.textContent = file.name;
+  trackingChooseBtn.disabled = true;
+  try {
+    if (!/\.(xlsx|xlsm)$/i.test(file.name)) throw new Error("Выберите файл XLSX или XLSM.");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const inspection = await WB1688TrackingXlsx.inspectTrackingWorkbook(bytes);
+    if (!inspection.orders.length) throw new Error("В файле нет номеров заказов.");
+    const response = await chrome.runtime.sendMessage({
+      type: "WB_1688_TRACKING_START",
+      fileName: file.name,
+      orders: inspection.orders,
+      sourceBase64: trackingBytesToBase64(bytes)
+    });
+    if (!response?.ok) throw new Error(response?.error || "Не удалось запустить обработку.");
+    renderTrackingState(response.state);
+  } catch (error) {
+    log(String(error?.message || error), "err");
+    trackingChooseBtn.disabled = false;
+  } finally {
+    trackingFileEl.value = "";
+  }
+});
+
+trackingStopBtn.addEventListener("click", async () => {
+  trackingStopBtn.disabled = true;
+  const response = await chrome.runtime.sendMessage({ type: "WB_1688_TRACKING_CANCEL" });
+  if (!response?.ok) log(response?.error || "Не удалось остановить обработку.", "err");
+  renderTrackingState(response?.state);
+});
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === "WB_1688_TRACKING_STATE") renderTrackingState(message.state);
+});
+
+chrome.runtime.sendMessage({ type: "WB_1688_TRACKING_GET" })
+  .then((response) => renderTrackingState(response?.state))
+  .catch(() => {});
