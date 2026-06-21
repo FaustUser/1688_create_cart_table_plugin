@@ -5,64 +5,463 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>1688 → Excel</title>
 <style>
-:root{--bg:#0e1014;--line:#303640;--muted:#9ba4b2;--text:#f3f5f7;--blue:#4387f7;--green:#74d69a;--red:#ff7272}
-*{box-sizing:border-box}body{font:14px/1.4 "Segoe UI Variable","Segoe UI",sans-serif;margin:0;padding:14px;width:430px;background:radial-gradient(circle at 90% 0,#1c2c43 0,transparent 42%),var(--bg);color:var(--text)}
-h1{font-size:17px;margin:0 0 12px}.stack{display:grid;gap:10px}.card{border:1px solid var(--line);border-radius:14px;padding:13px;background:linear-gradient(145deg,rgba(255,255,255,.045),rgba(255,255,255,.018));box-shadow:0 12px 28px rgba(0,0,0,.18)}
-.card-title{font-weight:750;font-size:14px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.col{display:flex;flex-direction:column;gap:7px}
-button{cursor:pointer;border:0;border-radius:9px;padding:9px 11px;background:var(--blue);color:white;font-weight:700}button.secondary{background:#303640}button.danger{background:#4a292d;color:#ffb3b3}button:disabled{opacity:.5;cursor:not-allowed}
-.muted{color:var(--muted);font-size:12px}.log{max-height:90px;overflow:auto;white-space:pre-wrap;font:11px/1.35 Consolas,monospace;color:#c5cad1}.ok{color:var(--green)}.err{color:var(--red)}
-label{display:flex;align-items:center;gap:6px;font-size:12px;color:#cbd0d7}input[type=number]{width:76px;border-radius:7px;border:1px solid var(--line);background:#0f1217;color:white;padding:5px 7px}input[type=radio]{accent-color:var(--blue)}
-.progress{display:none;gap:7px}.progress.visible{display:grid}.progress-track{height:8px;border-radius:99px;background:#292e37;overflow:hidden}.progress-fill{height:100%;width:0;background:linear-gradient(90deg,#397cf6,#70b5ff);transition:width .2s ease}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.stat{background:#20242b;border-radius:8px;padding:7px;text-align:center}.stat b{display:block;font-size:15px}.stat small{color:var(--muted)}.file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:root {
+  --background: hsl(222 28% 8%);
+  --foreground: hsl(210 28% 96%);
+  --card: hsl(220 24% 11%);
+  --card-foreground: hsl(210 28% 96%);
+  --popover: hsl(220 24% 11%);
+  --primary: hsl(176 74% 44%);
+  --primary-foreground: hsl(220 32% 7%);
+  --secondary: hsl(218 18% 18%);
+  --secondary-foreground: hsl(210 22% 92%);
+  --muted: hsl(218 16% 17%);
+  --muted-foreground: hsl(215 12% 68%);
+  --accent: hsl(38 92% 58%);
+  --accent-foreground: hsl(223 30% 8%);
+  --destructive: hsl(0 72% 52%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(218 18% 22%);
+  --input: hsl(218 18% 22%);
+  --ring: hsl(176 74% 44%);
+  --radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 430px;
+  min-height: 560px;
+  margin: 0;
+  padding: 14px;
+  color: var(--foreground);
+  background: linear-gradient(135deg, hsl(222 28% 8%) 0%, hsl(216 23% 10%) 48%, hsl(205 28% 13%) 100%);
+  font: 14px/1.45 "Segoe UI Variable", "Segoe UI", sans-serif;
+  letter-spacing: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  color: var(--primary-foreground);
+  background: var(--primary);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, opacity .16s ease, transform .16s ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: .54;
+  transform: none;
+}
+
+button.secondary {
+  border-color: var(--border);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+}
+
+button.danger {
+  color: var(--destructive-foreground);
+  background: color-mix(in srgb, var(--destructive) 82%, black);
+}
+
+input[type="number"] {
+  width: 84px;
+  height: 34px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  color: var(--foreground);
+  background: hsl(220 22% 9%);
+  font-weight: 650;
+}
+
+input[type="radio"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primary);
+}
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 2px 2px;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 20px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 9px;
+  color: var(--secondary-foreground);
+  background: color-mix(in srgb, var(--secondary) 72%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 75%, transparent);
+}
+
+.stack,
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 13px;
+  color: var(--card-foreground);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--card) 92%, white) 0%, var(--card) 100%);
+  box-shadow: 0 16px 36px rgb(0 0 0 / 22%);
+}
+
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.card-title {
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.card-description,
+.muted {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.field label,
+.radio-card {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.field input {
+  width: 100%;
+}
+
+.radio-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.radio-card {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  color: var(--secondary-foreground);
+  background: var(--muted);
+}
+
+.radio-card:has(input:checked) {
+  border-color: color-mix(in srgb, var(--primary) 70%, var(--border));
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 16%, var(--muted));
+}
+
+.primary-action {
+  width: 100%;
+}
+
+.file-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.file-name {
+  min-height: 38px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 9px 10px;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  background: hsl(220 22% 9% / 76%);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-name:empty::before {
+  content: "Файл не выбран";
+}
+
+.progress {
+  display: none;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: var(--radius);
+  padding: 10px;
+  background: color-mix(in srgb, var(--primary) 7%, var(--popover));
+}
+
+.progress.visible {
+  display: grid;
+}
+
+.progress-text,
+#trackingProgressText {
+  color: var(--secondary-foreground);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: hsl(220 24% 7%);
+}
+
+.progress-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  transition: width .2s ease;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stat {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
+  background: hsl(220 22% 9% / 76%);
+}
+
+.stat b {
+  display: block;
+  color: var(--foreground);
+  font-size: 17px;
+  line-height: 1;
+}
+
+.stat small {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.log {
+  min-height: 84px;
+  max-height: 112px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  color: hsl(210 22% 84%);
+  background: hsl(220 28% 6%);
+  font: 11px/1.45 Consolas, "Cascadia Mono", monospace;
+  white-space: pre-wrap;
+}
+
+.log:empty::before {
+  content: "Журнал операций появится здесь";
+  color: var(--muted-foreground);
+}
+
+.ok {
+  color: var(--primary);
+}
+
+.err {
+  color: hsl(0 85% 70%);
+}
 </style>
 </head>
 <body>
-<h1>1688 → Excel</h1>
-<main class="stack">
-<div class="card">
-  <div class="col">
-    <div class="card-title">Собрать новый файл</div>
-    <div class="muted">Товары и заказы с текущей страницы 1688.</div>
-    <div class="row">
-      <label>Шаг скролла, px: <input id="step" type="number" value="900"></label>
-      <label>Пауза, мс: <input id="wait" type="number" value="650"></label>
-      <label>Картинка, px: <input id="img" type="number" value="200"></label>
+<main class="shell">
+  <header class="topbar">
+    <div class="brand">
+      <div class="eyebrow">Расширение Chrome</div>
+      <h1>1688 → Excel</h1>
     </div>
+    <div class="badge">готово</div>
+  </header>
+
+  <section class="card">
     <div class="col">
-      <div class="muted">Корзина: какие товары собирать</div>
-      <div class="row">
-        <label><input type="radio" name="cartScope" value="all" checked> Все товары</label>
-        <label><input type="radio" name="cartScope" value="selected"> Только отмеченные</label>
+      <div class="card-header">
+        <div class="col">
+          <div class="card-title">Собрать новый файл</div>
+          <div class="card-description">Товары и заказы с текущей страницы 1688.</div>
+        </div>
+      </div>
+
+      <div class="field-grid" aria-label="Настройки сбора">
+        <div class="field">
+          <label for="step">Шаг, px</label>
+          <input id="step" type="number" value="900">
+        </div>
+        <div class="field">
+          <label for="wait">Пауза, мс</label>
+          <input id="wait" type="number" value="650">
+        </div>
+        <div class="field">
+          <label for="img">Картинка, px</label>
+          <input id="img" type="number" value="200">
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="muted">Корзина: какие товары собирать</div>
+        <div class="radio-group">
+          <label class="radio-card"><input type="radio" name="cartScope" value="all" checked> Все товары</label>
+          <label class="radio-card"><input type="radio" name="cartScope" value="selected"> Только отмеченные</label>
+        </div>
+      </div>
+
+      <button id="auto" class="primary-action">Собрать Excel</button>
+
+      <div id="progress" class="progress" aria-live="polite">
+        <div id="progressText" class="progress-text">Подготовка...</div>
+        <div class="progress-track">
+          <div id="progressFill" class="progress-fill"></div>
+        </div>
       </div>
     </div>
-    <button id="auto">Собрать Excel</button>
-    <div id="progress" class="progress" aria-live="polite">
-      <div id="progressText" class="progress-text">Подготовка…</div>
-      <div class="progress-track">
-        <div id="progressFill" class="progress-fill"></div>
+  </section>
+
+  <section class="card">
+    <div class="col">
+      <div class="card-header">
+        <div class="col">
+          <div class="card-title">Добавить трек-номера</div>
+          <div class="card-description">Загрузите Excel, созданный этим плагином. Обработка продолжится при закрытом popup.</div>
+        </div>
+      </div>
+
+      <input id="trackingFile" type="file" accept=".xlsx,.xlsm" hidden>
+      <div class="file-action">
+        <div id="trackingFileName" class="file-name"></div>
+        <button id="trackingChoose" class="secondary">Выбрать Excel</button>
+      </div>
+
+      <div id="trackingProgress" class="progress" aria-live="polite">
+        <div class="row" style="justify-content:space-between">
+          <span id="trackingProgressText">Обработано 0 из 0</span>
+          <b id="trackingPercent">0%</b>
+        </div>
+        <div class="progress-track">
+          <div id="trackingProgressFill" class="progress-fill"></div>
+        </div>
+        <div id="trackingCurrentOrder" class="muted"></div>
+        <div class="stats">
+          <div class="stat"><b id="trackingFound">0</b><small>с треками</small></div>
+          <div class="stat"><b id="trackingEmpty">0</b><small>пустые</small></div>
+          <div class="stat"><b id="trackingRemaining">0</b><small>осталось</small></div>
+        </div>
+        <button id="trackingStop" class="danger">Остановить</button>
       </div>
     </div>
-  </div>
-</div>
-<section class="card col">
-  <div class="card-title">Добавить трек-номера</div>
-  <div class="muted">Загрузите Excel, созданный этим плагином. Обработка продолжится при закрытом popup.</div>
-  <input id="trackingFile" type="file" accept=".xlsx,.xlsm" hidden>
-  <button id="trackingChoose" class="secondary">Выбрать Excel</button>
-  <div id="trackingFileName" class="muted file-name"></div>
-  <div id="trackingProgress" class="progress" aria-live="polite">
-    <div class="row" style="justify-content:space-between"><span id="trackingProgressText">Обработано 0 из 0</span><b id="trackingPercent">0%</b></div>
-    <div class="progress-track"><div id="trackingProgressFill" class="progress-fill"></div></div>
-    <div id="trackingCurrentOrder" class="muted"></div>
-    <div class="stats">
-      <div class="stat"><b id="trackingFound">0</b><small>с треками</small></div>
-      <div class="stat"><b id="trackingEmpty">0</b><small>пустые</small></div>
-      <div class="stat"><b id="trackingRemaining">0</b><small>осталось</small></div>
-    </div>
-    <button id="trackingStop" class="danger">Остановить</button>
-  </div>
-</section>
-<div id="log" class="log"></div>
+  </section>
+
+  <div id="log" class="log"></div>
 </main>
 <script src="tracking-xlsx.js"></script>
 <script src="xlsx-sheet-view.js"></script>
