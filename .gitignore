@@ -14,4 +14,8 @@ desktop.ini
 ~$*.xlsx
 *.zip
 
+# AI agents and MCP artifacts
+.agents/
+.codex/
 .superpowers/
+docs/superpowers/
