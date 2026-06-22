@@ -110,19 +110,57 @@ function getImageSrc(img){
 
 function isChecked(el){
   if (!el) return false;
-  
+
   const input = el.matches?.('input[type="checkbox"]') ? el : el.querySelector?.('input[type="checkbox"]');
   
   if (input) {
     if (input.checked) return true;
-    if (input.getAttribute("checked") != null) return true;
+    const checkedAttribute = input.getAttribute("checked");
+    if (checkedAttribute != null && !/^(false|0)$/i.test(checkedAttribute.trim())) return true;
     if (input.getAttribute("aria-checked") === "true") return true;
   }
-  
-  if (el.classList?.contains("checked")) return true;
-  if (el.getAttribute?.("aria-checked") === "true") return true;
-  
+
+  const ownCheckedAttribute = el.getAttribute?.("checked");
+  if (ownCheckedAttribute != null) {
+    return !/^(false|0)$/i.test(ownCheckedAttribute.trim());
+  }
+
+  const candidates = [el, ...Array.from(el.querySelectorAll?.("[class], [aria-checked]") || [])];
+  for (const candidate of candidates) {
+    if (candidate.getAttribute?.("aria-checked") === "true") return true;
+    const className = String(candidate.getAttribute?.("class") || "");
+    if (/(^|[-_\s])(checked|selected)([-_\s]|$)/i.test(className)) return true;
+  }
+
   return false;
+}
+
+function isCheckedSelectionControl(root){
+  if (!root) return false;
+  const selectors = [
+    "q-checkbox",
+    'input[type="checkbox"], [role="checkbox"], [aria-checked], [class*="checkbox"], [class*="Checkbox"]'
+  ];
+  const controls = selectors.flatMap((selector) => [
+    ...(root.matches?.(selector) ? [root] : []),
+    ...deepQueryAll(selector, root)
+  ]);
+  
+  return controls.some(isChecked);
+}
+
+function isOrderBlockSelected(orderContentEl){
+  const orderContainer = orderContentEl.closest?.(
+    "order-item, .order-item, [class*=order-item-container], [class*=order-container]"
+  );
+  const roots = Array.from(new Set([
+    orderContentEl.previousElementSibling,
+    orderContentEl,
+    orderContainer,
+    orderContainer?.querySelector?.("order-item-header, .order-item-header, [class*=order-header]")
+  ].filter(Boolean)));
+  
+  return roots.some(isCheckedSelectionControl);
 }
 
 function detectPageType(root=document){
@@ -485,16 +523,27 @@ function parseCartGroup(groupEl, cartSelectionMode = "all"){
   };
 }
 
-function collectOrderRows(){
+function collectOrderRows(cartSelectionMode = "all"){
+  const normalizedMode = normalizeCartSelectionMode(cartSelectionMode);
   const blocks = deepQueryAll(".order-item-content");
   const all = [];
-  for (const b of blocks) all.push(...parseOrderBlock(b));
+  let selectedEntries = 0;
+
+  for (const b of blocks) {
+    const rows = parseOrderBlock(b);
+    const checked = isOrderBlockSelected(b);
+    if (checked) selectedEntries += rows.length;
+    if (normalizedMode === "selected" && !checked) continue;
+    all.push(...rows);
+  }
   
   return {
     pageType: "orders",
     blocks: blocks.length,
     entries: deepQueryAll(".order-item-entry").length,
-    selectedEntries: all.length,
+    selectedEntries,
+    collectedEntries: all.length,
+    cartSelectionMode: normalizedMode,
     rows: all
   };
 }
@@ -527,7 +576,7 @@ function collectCartRows(cartSelectionMode = "all"){
 function collectAllRows(cartSelectionMode = "all"){
   const pageType = detectPageType();
   
-  if (pageType === "orders") return collectOrderRows();
+  if (pageType === "orders") return collectOrderRows(cartSelectionMode);
   if (pageType === "cart") return collectCartRows(cartSelectionMode);
   
   return {
