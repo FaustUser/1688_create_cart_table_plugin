@@ -853,7 +853,7 @@ async function buildAndDownload(rows, imgPx, pageType="orders", onProgress = nul
       embedded.length,
       imgPx,
       embeddedRowIdx,
-      pageType === "orders" ? 1 : 0
+      pageType === "orders" ? 2 : 0
     );
     const imageNames = embedded.map((img, idx) => `image${idx + 1}.${img.ext}`);
     const drawingRels = makeDrawingRels(imageNames);
@@ -887,18 +887,19 @@ const contentHeaders = ["Картинка", "Ссылка", "Название н
 // type  — WB_1688_AUTO или WB_1688_EXPORT
 // label — сообщение в лог на время выполнения
 const ORDER_EXPORT_CONFIG = {
-  headers: ["Номер заказа", "Картинка", "Дата заказа", "Ссылка", "Название на 1688", "Количество", "Цена за ед.", "Доставка по Китаю", "Скидка", "Итого юань"],
-  widths: (imgColWidth) => ["24", imgColWidth ? imgColWidth.toFixed(2) : "30", "22", "24", "24", "11.5", "11.5", "17.3", "8.3", "11"],
+  headers: ["Номер заказа", "Трек номер", "Картинка", "Дата заказа", "Ссылка", "Название на 1688", "Количество", "Цена за ед.", "Доставка по Китаю", "Скидка", "Итого юань"],
+  widths: (imgColWidth) => ["24", "24", imgColWidth ? imgColWidth.toFixed(2) : "30", "22", "24", "24", "11.5", "11.5", "17.3", "8.3", "11"],
   buildCells: (row, excelRow) => ([
     { c: 1, t: "inlineStr", v: row.orderNumber || "", s: "1" },
-    { c: 3, t: "inlineStr", v: row.orderDate || "", s: "1" },
-    { c: 4, t: "inlineStr", v: row.link || "", s: "1" },
-    { c: 5, t: "inlineStr", v: row.exportTitle || row.variant || row.title || "", s: "1" },
-    { c: 6, t: "n", v: Number(row.qty || 0), s: "0" },
-    { c: 7, t: "n", v: Number(row.unitPrice || 0), s: "2" },
-    { c: 8, t: "n", v: Number(row.shippingShare || 0), s: "2" },
-    { c: 9, t: "n", v: Number(row.discountShare || 0), s: "2" },
-    { c: 10, t: "f", f: `F${excelRow}*G${excelRow}+H${excelRow}-I${excelRow}`, s: "2" }
+    { c: 2, t: "inlineStr", v: "", s: "1" },
+    { c: 4, t: "inlineStr", v: row.orderDate || "", s: "1" },
+    { c: 5, t: "inlineStr", v: row.link || "", s: "1" },
+    { c: 6, t: "inlineStr", v: row.exportTitle || row.variant || row.title || "", s: "1" },
+    { c: 7, t: "n", v: Number(row.qty || 0), s: "0" },
+    { c: 8, t: "n", v: Number(row.unitPrice || 0), s: "2" },
+    { c: 9, t: "n", v: Number(row.shippingShare || 0), s: "2" },
+    { c: 10, t: "n", v: Number(row.discountShare || 0), s: "2" },
+    { c: 11, t: "f", f: `G${excelRow}*H${excelRow}+I${excelRow}-J${excelRow}`, s: "2" }
   ])
 };
 

@@ -54,7 +54,7 @@ test("updates existing tracking column without inserting another", () => {
   const once = enrichSheetXml(sheet, [], { "512": ["SF1"] }).xml;
   const twice = enrichSheetXml(once, [], { "512": ["SF2"] }).xml;
   assert.equal((twice.match(/Трек номер/g) || []).length, 1);
-  assert.match(twice, /SF2/);
+  assert.match(twice, /<c r="B2" t="inlineStr"[^>]*>[\s\S]*<t>SF2<\/t>/);
 });
 
 test("shifts image anchors at and after inserted column", () => {
