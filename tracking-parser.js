@@ -1,7 +1,11 @@
 (function (root) {
-  const LABEL_SOURCE = "(?:运单号码|Номер\\s+накладной)";
+  const LABEL_SOURCE = "(?:运单号码|运单编号|运单号|物流单号|物流运单号|物流编号|快递单号|快递编号|货运单号|包裹单号|包裹号|Номер\\s+накладной|Трек\\s*номер)";
   const LABEL_RE = new RegExp(LABEL_SOURCE, "i");
-  const LABELED_VALUE_RE = new RegExp(`${LABEL_SOURCE}\\s*[:：]?\\s*([^\\r\\n]+)`, "gi");
+  const LABELED_VALUE_RE = new RegExp(`${LABEL_SOURCE}[\\s:：#-]*(?:复制)?[\\s:：#-]*([^\\r\\n]+)`, "gi");
+  const TRACKING_VALUE_RE = /^[A-Za-z0-9-]{8,50}$/;
+  const GENERIC_TRACKING_LABEL_RE = /(运单|物流|快递|货运|包裹|承运|面单|mail|waybill|tracking|track|bill|накладной|трек)/i;
+  const NON_TRACKING_LABEL_RE = /(订单|订单号|订单编号|order\s*(?:id|no|number)|商品|货品|sku|offer)/i;
+  const TRACKING_FIELD_RE = /(mail|bill|waybill|tracking|track|express|logistics|parcel|package|delivery|运单|物流|快递|包裹|单号|编号)/i;
 
   function cleanValue(value) {
     return String(value || "")
@@ -10,22 +14,62 @@
       .trim();
   }
 
+  function isTrackingValue(value) {
+    const text = String(value || "").trim();
+    if (!TRACKING_VALUE_RE.test(text)) return false;
+    if (!/\d/.test(text)) return false;
+    if (/^\d{19,}$/.test(text)) return false;
+    return true;
+  }
+
   function normalizeTrackingNumbers(values) {
     const seen = new Set();
     const result = [];
     for (const raw of values || []) {
       const value = cleanValue(raw);
-      if (!value || value.length > 160 || seen.has(value)) continue;
+      if (!isTrackingValue(value) || seen.has(value)) continue;
       seen.add(value);
       result.push(value);
     }
     return result;
   }
 
+  function trackingValuesFromObject(data) {
+    const values = [
+      data?.mailNo,
+      data?.logisticsBillNo,
+      data?.noLogisticsBillNo,
+      data?.logisticsExternalNo
+    ];
+    for (const [key, raw] of Object.entries(data || {})) {
+      if (!TRACKING_FIELD_RE.test(String(key || ""))) continue;
+      if (!["string", "number"].includes(typeof raw)) continue;
+      const value = String(raw || "").trim();
+      if (isTrackingValue(value)) values.push(value);
+    }
+    return values;
+  }
+
+  function extractGenericTrackingValuesFromText(text) {
+    const lines = String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const values = [];
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      if (!GENERIC_TRACKING_LABEL_RE.test(line) || NON_TRACKING_LABEL_RE.test(line)) continue;
+      const windowText = [line, lines[index + 1] || "", lines[index + 2] || ""].join(" ");
+      for (const match of windowText.matchAll(/[A-Za-z0-9-]{6,50}/g)) {
+        const value = cleanValue(match[0]);
+        if (isTrackingValue(value)) values.push(value);
+      }
+    }
+    return values;
+  }
+
   function extractTrackingNumbersFromText(text) {
     const values = [];
     const source = String(text || "");
     for (const match of source.matchAll(LABELED_VALUE_RE)) values.push(match[1]);
+    values.push(...extractGenericTrackingValuesFromText(source));
     return normalizeTrackingNumbers(values);
   }
 
@@ -62,9 +106,9 @@
 
   function extractStrictTrackingNumber(text) {
     const source = String(text || "");
-    const match = source.match(new RegExp(`${LABEL_SOURCE}\\s*[:：]?\\s*([A-Za-z0-9-]{6,50})`, "i"));
+    const match = source.match(new RegExp(`${LABEL_SOURCE}[\\s:：#-]*(?:复制)?[\\s:：#-]*([A-Za-z0-9-]{6,50})`, "i"));
     const value = cleanValue(match?.[1] || "");
-    return /^[A-Za-z0-9-]{6,50}$/.test(value) ? value : "";
+    return isTrackingValue(value) ? value : "";
   }
 
   function offerIdFromHref(href) {
@@ -79,12 +123,7 @@
   }
 
   function shipmentFromComponentData(trackData, productData) {
-    const trackingNumber = normalizeTrackingNumbers([
-      trackData?.mailNo,
-      trackData?.logisticsBillNo,
-      trackData?.noLogisticsBillNo,
-      trackData?.logisticsExternalNo
-    ])[0] || "";
+    const trackingNumber = normalizeTrackingNumbers(trackingValuesFromObject(trackData))[0] || "";
     if (!trackingNumber) return null;
 
     const products = (Array.isArray(productData) ? productData : []).map((product) => {
@@ -166,7 +205,7 @@
 
   function textShipmentCandidates(text) {
     const source = String(text || "");
-    const pattern = new RegExp(`${LABEL_SOURCE}\\s*[:：]?\\s*[A-Za-z0-9-]{6,50}`, "gi");
+    const pattern = new RegExp(`${LABEL_SOURCE}[\\s:：#-]*(?:复制)?[\\s:：#-]*[A-Za-z0-9-]{6,50}`, "gi");
     const matches = [...source.matchAll(pattern)];
     return matches.map((match, index) => {
       const previousEnd = index === 0 ? 0 : matches[index - 1].index + matches[index - 1][0].length;
@@ -182,7 +221,7 @@
   function parseShipmentsFromText(text, expectedProducts = []) {
     const source = String(text || "");
     const candidates = textShipmentCandidates(source);
-    const pattern = new RegExp(`${LABEL_SOURCE}\\s*[:：]?\\s*[A-Za-z0-9-]{6,50}`, "gi");
+    const pattern = new RegExp(`${LABEL_SOURCE}[\\s:：#-]*(?:复制)?[\\s:：#-]*[A-Za-z0-9-]{6,50}`, "gi");
     const trackMatches = [...source.matchAll(pattern)];
     for (const product of expectedProducts || []) {
       const title = String(product.title || "").trim();

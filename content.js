@@ -602,6 +602,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           if (shipments.length && shipments.every((shipment) => shipment.products.length)) break;
           await sleep(500);
         }
+        const seenTracks = new Set(shipments.map((shipment) => String(shipment.trackingNumber || "").trim()).filter(Boolean));
+        const blockedTracks = new Set((msg.products || []).map((product) => String(product?.offerId || "").trim()).filter(Boolean));
+        for (const trackingNumber of WB1688TrackingParser.extractTrackingNumbers(document)) {
+          if (seenTracks.has(trackingNumber) || blockedTracks.has(trackingNumber)) continue;
+          seenTracks.add(trackingNumber);
+          shipments.push({ trackingNumber, products: [] });
+        }
         const pageText = normalizeText(document.body?.innerText || "");
         const diagnostic = shipments.length ? "" : pageText.slice(0, 1200);
         sendResponse({ ok: true, shipments, diagnostic });

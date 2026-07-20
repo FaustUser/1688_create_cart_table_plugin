@@ -122,12 +122,43 @@
       return `<cols>${shifted}<col min="${insertCol + 1}" max="${insertCol + 1}" width="24" customWidth="1"/></cols>`;
     });
   }
+  function uniqueShipmentTracks(shipments) {
+    return [...new Set((shipments || [])
+      .map((shipment) => String(shipment?.trackingNumber || "").trim())
+      .filter(Boolean))];
+  }
+  function countOrderRows(rows, orderCol, sharedStrings) {
+    const counts = {};
+    for (const row of rows) {
+      if (row.row === 1) continue;
+      const order = parseCells(row.xml, sharedStrings).find((c) => c.col === orderCol)?.value.trim() || "";
+      if (order) counts[order] = (counts[order] || 0) + 1;
+    }
+    return counts;
+  }
+  function orderOfferStats(rows, orderCol, linkCol, sharedStrings) {
+    const stats = {};
+    if (linkCol == null) return stats;
+    for (const row of rows) {
+      if (row.row === 1) continue;
+      const cells = parseCells(row.xml, sharedStrings);
+      const order = cells.find((c) => c.col === orderCol)?.value.trim() || "";
+      if (!order) continue;
+      const link = cells.find((c) => c.col === linkCol)?.value.trim() || "";
+      const offerId = (link.match(/detail\.1688\.com\/offer\/(\d+)\.html/i) || [])[1] || "";
+      if (offerId) (stats[order] ||= new Set()).add(offerId);
+    }
+    return stats;
+  }
   function enrichSheetXml(xml, sharedStrings = [], trackingByOrder = {}) {
     const { orderCol, trackingCol, linkCol, titleCol } = findColumns(xml, sharedStrings);
     const insert = trackingCol == null;
     const targetCol = insert ? orderCol + 1 : trackingCol;
     let output = String(xml);
-    const rows = parseRows(output).reverse();
+    const parsedRows = parseRows(output);
+    const orderRowCounts = countOrderRows(parsedRows, orderCol, sharedStrings);
+    const offerStats = orderOfferStats(parsedRows, orderCol, linkCol, sharedStrings);
+    const rows = parsedRows.reverse();
     for (const row of rows) {
       const cells = parseCells(row.xml, sharedStrings);
       const order = cells.find((c) => c.col === orderCol)?.value.trim() || "";
@@ -140,12 +171,23 @@
         return { ...c, outCol, out: rewriteCell(c.xml, outCol, targetCol) };
       });
       else newCells = newCells.map((c) => ({ ...c, outCol: c.col, out: c.xml }));
-      let rowTracks = trackingByOrder[order] || [];
+      const orderTracks = trackingByOrder[order] || [];
+      let rowTracks = orderTracks;
       if (trackingByOrder.shipmentDataByOrder) {
         const matcher = getMatcher();
-        rowTracks = matcher
-          ? matcher.matchTrackingForRow({ link, title }, trackingByOrder.shipmentDataByOrder[order] || [])
+        const shipments = trackingByOrder.shipmentDataByOrder[order] || [];
+        const matchedTracks = matcher
+          ? matcher.matchTrackingForRow({ link, title }, shipments)
           : [];
+        if (matchedTracks.length) {
+          rowTracks = matchedTracks;
+        } else {
+          const shipmentTracks = uniqueShipmentTracks(shipments);
+          const oneOfferOrder = offerStats[order]?.size === 1;
+          const fallbackTracks = shipmentTracks.length ? shipmentTracks : orderTracks;
+          if (fallbackTracks.length === 1 || orderRowCounts[order] === 1 || oneOfferOrder) rowTracks = fallbackTracks;
+          else rowTracks = [];
+        }
       }
       const value = row.row === 1 ? "Трек номер" : rowTracks.join("\n");
       newCells.push({ col: targetCol, outCol: targetCol, out: makeInlineCell(targetCol, row.row, value, style) });

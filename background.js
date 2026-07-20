@@ -64,14 +64,18 @@ function readLogisticsComponentsInPage() {
       trackElement.parentElement?.querySelector?.("logistics-info-product") ||
       products[index];
     const track = trackElement.data || {};
+    const trackData = {
+      mailNo: track.mailNo,
+      logisticsBillNo: track.logisticsBillNo,
+      noLogisticsBillNo: track.noLogisticsBillNo,
+      logisticsExternalNo: track.logisticsExternalNo
+    };
+    for (const [key, value] of Object.entries(track)) {
+      if (["string", "number", "boolean"].includes(typeof value)) trackData[key] = value;
+    }
     const productItems = Array.isArray(productElement?.data) ? productElement.data : [];
     return {
-      trackData: {
-        mailNo: track.mailNo,
-        logisticsBillNo: track.logisticsBillNo,
-        noLogisticsBillNo: track.noLogisticsBillNo,
-        logisticsExternalNo: track.logisticsExternalNo
-      },
+      trackData,
       productData: productItems.map((product) => ({
         orderEntryId: product?.orderEntryId,
         offerId: product?.offerId,
@@ -85,6 +89,54 @@ function readLogisticsComponentsInPage() {
       }))
     };
   });
+}
+
+function readTrackingNumbersFromPageText() {
+  const labelSource = "(?:运单号码|运单编号|运单号|物流单号|物流运单号|物流编号|快递单号|快递编号|货运单号|包裹单号|包裹号|Номер\\s+накладной|Трек\\s*номер)";
+  const labeledValueRe = new RegExp(`${labelSource}[\\s:：#-]*(?:复制)?[\\s:：#-]*([A-Za-z0-9-]{6,50})`, "gi");
+  const genericLabelRe = /(运单|物流|快递|货运|包裹|承运|面单|mail|waybill|tracking|track|bill|накладной|трек)/i;
+  const nonTrackingLabelRe = /(订单|订单号|订单编号|order\s*(?:id|no|number)|商品|货品|sku|offer)/i;
+  const isTrackingValue = (value) => {
+    const text = String(value || "").trim();
+    return /^[A-Za-z0-9-]{8,50}$/.test(text) && /\d/.test(text) && !/^\d{19,}$/.test(text);
+  };
+  const texts = [];
+  const collect = (scope) => {
+    if (!scope) return;
+    const text = String(scope.innerText || scope.textContent || "").trim();
+    if (text) texts.push(text);
+    if (!scope.querySelectorAll) return;
+    for (const element of scope.querySelectorAll("*")) {
+      const ownText = String(element.innerText || element.textContent || "").trim();
+      if (ownText) texts.push(ownText);
+      if (element.shadowRoot) collect(element.shadowRoot);
+    }
+  };
+  collect(document.body || document);
+
+  const seen = new Set();
+  const values = [];
+  for (const text of texts) {
+    for (const match of text.matchAll(labeledValueRe)) {
+      const value = String(match[1] || "").trim();
+      if (!isTrackingValue(value) || seen.has(value)) continue;
+      seen.add(value);
+      values.push(value);
+    }
+    const lines = String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      if (!genericLabelRe.test(line) || nonTrackingLabelRe.test(line)) continue;
+      const windowText = [line, lines[index + 1] || "", lines[index + 2] || ""].join(" ");
+      for (const match of windowText.matchAll(/[A-Za-z0-9-]{6,50}/g)) {
+        const value = String(match[0] || "").trim();
+        if (!isTrackingValue(value) || seen.has(value)) continue;
+        seen.add(value);
+        values.push(value);
+      }
+    }
+  }
+  return values.map((trackingNumber) => ({ trackingNumber, products: [] }));
 }
 
 async function collectLogisticsFromMainWorld(tabId, timeoutMs = 15000) {
@@ -108,6 +160,73 @@ async function collectLogisticsFromMainWorld(tabId, timeoutMs = 15000) {
   return shipments;
 }
 
+async function collectTrackingTextFromMainWorld(tabId, timeoutMs = 30000) {
+  const started = Date.now();
+  let shipments = [];
+  while (Date.now() - started < timeoutMs) {
+    const execution = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: readTrackingNumbersFromPageText
+    });
+    shipments = execution?.[0]?.result || [];
+    if (shipments.length) return shipments;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return shipments;
+}
+
+function shipmentProductKey(product) {
+  return [
+    String(product?.orderEntryId || "").trim(),
+    String(product?.offerId || "").trim(),
+    String(product?.normalizedTitle || product?.title || "").trim()
+  ].join("|");
+}
+
+function mergeShipments(...groups) {
+  const byTrack = new Map();
+  for (const shipment of groups.flat()) {
+    const trackingNumber = String(shipment?.trackingNumber || "").trim();
+    if (!trackingNumber) continue;
+    const existing = byTrack.get(trackingNumber) || { trackingNumber, products: [] };
+    const seenProducts = new Set(existing.products.map(shipmentProductKey));
+    for (const product of shipment.products || []) {
+      const key = shipmentProductKey(product);
+      if (!key.replace(/\|/g, "") || seenProducts.has(key)) continue;
+      seenProducts.add(key);
+      existing.products.push(product);
+    }
+    byTrack.set(trackingNumber, existing);
+  }
+  return [...byTrack.values()];
+}
+
+function filterShipmentCandidates(shipments, order, expectedProducts) {
+  const blocked = new Set([
+    String(order || "").trim(),
+    ...(expectedProducts || []).map((product) => String(product?.offerId || "").trim())
+  ].filter(Boolean));
+  return (shipments || []).filter((shipment) => {
+    const trackingNumber = String(shipment?.trackingNumber || "").trim();
+    return trackingNumber && !blocked.has(trackingNumber);
+  });
+}
+
+async function collectLogisticsFromContentScript(tabId, products, timeoutMs = 15000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const response = await chrome.tabs.sendMessage(tabId, {
+      type: "WB_1688_COLLECT_TRACKING",
+      products,
+      timeoutMs: Math.max(1000, timeoutMs - (Date.now() - started))
+    }).catch(() => null);
+    if (response?.ok && Array.isArray(response.shipments)) return response.shipments;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return [];
+}
+
 async function collectOrderTracking(order, state) {
   let tabId = null;
   try {
@@ -117,7 +236,17 @@ async function collectOrderTracking(order, state) {
     state.currentTabId = tabId;
     await publishJob(state);
     await waitForTabComplete(tabId);
-    return await collectLogisticsFromMainWorld(tabId);
+    const expectedProducts = state.productsByOrder?.[order] || [];
+    const componentShipments = await collectLogisticsFromMainWorld(tabId);
+    const contentShipments = await collectLogisticsFromContentScript(tabId, expectedProducts);
+    const mergedShipments = filterShipmentCandidates(
+      mergeShipments(componentShipments, contentShipments),
+      order,
+      expectedProducts
+    );
+    if (mergedShipments.length) return mergedShipments;
+    const textShipments = await collectTrackingTextFromMainWorld(tabId);
+    return filterShipmentCandidates(mergeShipments(textShipments), order, expectedProducts);
   } catch (error) {
     console.warn(`[1688 tracking ${order}]`, error);
     return [];
@@ -127,9 +256,10 @@ async function collectOrderTracking(order, state) {
 }
 
 async function downloadResult(state) {
-  const trackingSource = state.shipmentDataByOrder && Object.keys(state.shipmentDataByOrder).length
-    ? { shipmentDataByOrder: state.shipmentDataByOrder }
-    : state.trackingByOrder;
+  const trackingSource = {
+    ...state.trackingByOrder,
+    shipmentDataByOrder: state.shipmentDataByOrder || {}
+  };
   const output = await WB1688TrackingXlsx.enrichTrackingWorkbook(base64ToBytes(state.sourceBase64), trackingSource);
   const stem = state.fileName.replace(/\.(xlsx|xlsm)$/i, "");
   const offscreenUrl = chrome.runtime.getURL("offscreen.html");
