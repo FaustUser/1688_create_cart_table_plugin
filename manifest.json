@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "1688 → Excel (images + paid price)",
-  "version": "1.7.4",
-  "description": "1688: автоскролл/раскрытие, XLSX «Товары», вставка картинок, цена = total-price (после скидок).",
+  "version": "1.7.11",
+  "description": "1688: экспорт текущих цен и доставки в XLSX с корректировкой до оплаченного итога заказа.",
   "action": {
     "default_popup": "popup.html",
     "default_title": "1688 → Excel"

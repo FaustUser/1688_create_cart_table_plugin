@@ -63,10 +63,6 @@ function is1688Tab(tab) {
   return /^https:\/\/([^/]+\.)?1688\.com\//i.test(String(tab?.url || ""));
 }
 
-function isMissingReceiverError(error) {
-  return /Receiving end does not exist|Could not establish connection/i.test(String(error?.message || error || ""));
-}
-
 async function ensureContentScript(tabId) {
   await chrome.scripting.executeScript({
     target: { tabId, frameIds: [0] },
@@ -93,17 +89,23 @@ async function send(tab, type, extraPayload = {}) {
   const wait = Number(waitEl.value || 650);
   const payload = { type, step, wait, ...extraPayload };
 
-  try {
-    return await chrome.tabs.sendMessage(tab.id, payload, { frameId: 0 });
-  } catch (error) {
-    if (!isMissingReceiverError(error)) throw error;
-    if (!is1688Tab(tab)) {
-      throw new Error("Открой страницу 1688 с заказами или корзиной и повтори.");
-    }
-
-    await ensureContentScript(tab.id);
-    return chrome.tabs.sendMessage(tab.id, payload, { frameId: 0 });
+  if (!is1688Tab(tab)) {
+    throw new Error("Открой страницу 1688 с заказами или корзиной и повтори.");
   }
+
+  // Повторная инъекция обновляет функции парсера без перезагрузки страницы
+  // и сохраняет отметки заказов в DOM.
+  await ensureContentScript(tab.id);
+  const [injected] = await chrome.scripting.executeScript({
+    target: { tabId: tab.id, frameIds: [0] },
+    func: (request) => globalThis.__WB1688_RUN_EXPORT__(request),
+    args: [payload]
+  });
+  const result = injected?.result;
+  if (!result?.ok || result.parserVersion !== chrome.runtime.getManifest().version) {
+    throw new Error(result?.error || "Не удалось запустить текущую версию парсера 1688.");
+  }
+  return result;
 }
 
 // Универсальный парсер числа из строки (учитывает запятую и точку)
@@ -1016,6 +1018,7 @@ async function runTabExport(type, label) {
     const requestedCartSelectionMode = getCartSelectionMode();
     const resp = await withActiveTab((tabId) => send(tabId, type, { cartSelectionMode: requestedCartSelectionMode }));
     if (!resp?.ok) throw new Error(resp?.error || "Ошибка");
+    log(`parser: ${resp.parserVersion}`, "ok");
 
     const rows = Array.isArray(resp.rows) ? resp.rows : [];
     if (!rows.length) {
