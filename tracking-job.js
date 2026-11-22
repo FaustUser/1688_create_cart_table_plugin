@@ -22,6 +22,8 @@
       progress: uniqueOrders.length ? 0 : 100,
       status: "idle",
       currentTabId: null,
+      activeTabsByOrder: {},
+      events: [],
       error: ""
     };
   }
@@ -40,15 +42,15 @@
     const shipmentDataByOrder = isShipmentData
       ? { ...state.shipmentDataByOrder, [order]: items }
       : state.shipmentDataByOrder;
-    const processed = Math.min(state.orders.length, state.index + 1);
+    const processed = Object.keys(trackingByOrder).length;
     const remaining = Math.max(0, state.orders.length - processed);
     return {
       ...state,
       index: processed,
       trackingByOrder,
       shipmentDataByOrder,
-      found: state.found + (values.length ? 1 : 0),
-      empty: state.empty + (values.length ? 0 : 1),
+      found: Object.values(trackingByOrder).filter((tracks) => tracks.length).length,
+      empty: Object.values(trackingByOrder).filter((tracks) => !tracks.length).length,
       remaining,
       progress: state.orders.length ? Math.round(processed * 100 / state.orders.length) : 100,
       status: remaining ? "running" : "completed",
@@ -58,7 +60,7 @@
   }
 
   function cancelJob(state) {
-    return { ...state, status: "cancelled", currentOrder: "", currentTabId: null };
+    return { ...state, status: "cancelled", currentOrder: "", currentTabId: null, activeTabsByOrder: {} };
   }
 
   const api = { snapshot, createTrackingJob, startOrder, completeOrder, cancelJob };

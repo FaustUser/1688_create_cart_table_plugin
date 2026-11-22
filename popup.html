@@ -365,6 +365,21 @@ h1 {
   color: var(--muted-foreground);
 }
 
+.job-log {
+  max-height: 190px;
+  min-height: 50px;
+  overflow: auto;
+  margin: 7px 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: hsl(220 28% 6%);
+  color: hsl(210 22% 84%);
+  font: 10px/1.5 Consolas, "Cascadia Mono", monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .ok {
   color: var(--primary);
 }
@@ -432,7 +447,7 @@ h1 {
       <div class="card-header">
         <div class="col">
           <div class="card-title">Добавить трек-номера</div>
-          <div class="card-description">Загрузите Excel, созданный этим плагином. Обработка продолжится при закрытом popup.</div>
+          <div class="card-description">Загрузите Excel, созданный этим плагином, в том числе файл с уже добавленными треками. Корректно заполненные строки пропускаются; поиск идёт в трёх вкладках.</div>
         </div>
       </div>
 
@@ -458,6 +473,43 @@ h1 {
         </div>
         <button id="trackingStop" class="danger">Остановить</button>
       </div>
+      <details id="trackingLogBox">
+        <summary>Журнал поиска треков</summary>
+        <pre id="trackingLog" class="job-log"></pre>
+        <button id="trackingCopyLog" class="secondary" type="button">Скопировать журнал</button>
+      </details>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="col">
+      <div class="card-header">
+        <div class="col">
+          <div class="card-title">Проверить доставку</div>
+          <div class="card-description">Загрузите Excel с трек-номерами или ранее заполненными статусами. Заказы без треков и уже доставленные заказы будут пропущены.</div>
+        </div>
+      </div>
+
+      <input id="deliveryFile" type="file" accept=".xlsx,.xlsm" hidden>
+      <div class="file-action">
+        <div id="deliveryFileName" class="file-name"></div>
+        <button id="deliveryChoose" class="secondary">Выбрать Excel</button>
+      </div>
+
+      <div id="deliveryProgress" class="progress" aria-live="polite">
+        <div class="row" style="justify-content:space-between">
+          <span id="deliveryProgressText" class="progress-text">Обработано 0 из 0</span>
+          <b id="deliveryPercent">0%</b>
+        </div>
+        <div class="progress-track"><div id="deliveryProgressFill" class="progress-fill"></div></div>
+        <div id="deliveryCurrentOrder" class="muted"></div>
+        <button id="deliveryStop" class="danger">Остановить</button>
+      </div>
+      <details id="deliveryLogBox">
+        <summary>Журнал проверки</summary>
+        <pre id="deliveryLog" class="job-log"></pre>
+        <button id="deliveryCopyLog" class="secondary" type="button">Скопировать журнал</button>
+      </details>
     </div>
   </section>
 

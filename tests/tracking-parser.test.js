@@ -8,13 +8,14 @@ const {
   extractStrictTrackingNumber,
   parseShipmentsFromText,
   shipmentFromComponentData,
-  extractComponentShipments
+  extractComponentShipments,
+  waybillFromMessageElement
 } = require("../tracking-parser.js");
 
 test("extracts Chinese and Russian labeled tracking numbers", () => {
   assert.deepEqual(
-    extractTrackingNumbersFromText("运单号码：SF123456\nНомер накладной: LP987654"),
-    ["SF123456", "LP987654"]
+    extractTrackingNumbersFromText("运单号码：SF123456\nНомер накладной: YT987654"),
+    ["SF123456", "YT987654"]
   );
 });
 
@@ -80,7 +81,7 @@ test("builds a shipment from 1688 logistics web-component data", () => {
 
 test("supports alternate tracking and product fields from 1688 component data", () => {
   const shipment = shipmentFromComponentData(
-    { logisticsBillNo: "79013073051947" },
+    { waybillNo: "79013073051947", logisticsBillNo: "LP00851692921520" },
     [{ subject: "经济版7.8Vf全能套+30件批头套", offerUrl: "https://detail.1688.com/offer/719746403487.html" }]
   );
   assert.equal(shipment.trackingNumber, "79013073051947");
@@ -88,31 +89,57 @@ test("supports alternate tracking and product fields from 1688 component data", 
   assert.equal(shipment.products[0].title, "经济版7.8Vf全能套+30件批头套");
 });
 
+test("never treats a logistics ID as a waybill", () => {
+  assert.deepEqual(extractTrackingNumbersFromText(
+    "物流编号：LP00851692921520\n运单号码：435404121130551"), ["435404121130551"]);
+  assert.equal(shipmentFromComponentData({ mailNo: "LP00851692921520", logisticsBillNo: "LP00851692921520" }, []), null);
+  assert.equal(shipmentFromComponentData({ logisticsBillNo: "79013073051947" }, []), null);
+});
+
+test("reads the exact waybill label from the logistics message", () => {
+  const item = (label, value) => ({ querySelector(selector) {
+    return selector === ".info-item-tit" ? { textContent: label } : { textContent: value };
+  } });
+  const product = { tagName: "LOGISTICS-INFO-PRODUCT", data: [{ name: "Товар" }] };
+  const track = { tagName: "LOGISTICS-INFO-TRACK", data: { mailNo: "LP00851692921520" } };
+  const parentElement = { querySelector(selector) {
+    return selector === "logistics-info-product" ? product : track;
+  } };
+  const message = { tagName: "LOGISTICS-INFO-MESSAGE", parentElement,
+    shadowRoot: { querySelectorAll() { return [
+      item("物流编号：", "LP00851692921520"),
+      item("运单号码：", "435404121130551")
+    ]; } } };
+  assert.equal(waybillFromMessageElement(message), "435404121130551");
+  assert.deepEqual(extractComponentShipments([message, track, product])
+    .map((shipment) => shipment.trackingNumber), ["435404121130551"]);
+});
+
 test("pairs each logistics track component with its sibling product component", () => {
   const firstProduct = { tagName: "LOGISTICS-INFO-PRODUCT", data: [{ name: "Первый товар" }] };
   const secondProduct = { tagName: "LOGISTICS-INFO-PRODUCT", data: [{ name: "Второй товар" }] };
   const firstTrack = {
     tagName: "LOGISTICS-INFO-TRACK",
-    data: { mailNo: "TRACK-1" },
+    data: { mailNo: "TRACK-1001" },
     parentElement: { querySelector: () => firstProduct }
   };
   const secondTrack = {
     tagName: "LOGISTICS-INFO-TRACK",
-    data: { mailNo: "TRACK-2" },
+    data: { mailNo: "TRACK-2002" },
     parentElement: { querySelector: () => secondProduct }
   };
 
   assert.deepEqual(
     extractComponentShipments([firstTrack, firstProduct, secondTrack, secondProduct])
       .map((shipment) => [shipment.trackingNumber, shipment.products[0].title]),
-    [["TRACK-1", "Первый товар"], ["TRACK-2", "Второй товар"]]
+    [["TRACK-1001", "Первый товар"], ["TRACK-2002", "Второй товар"]]
   );
 });
 
 test("normalizes duplicate values and joins them with line breaks", () => {
-  const values = normalizeTrackingNumbers([" SF123 ", "SF123", "LP456"]);
-  assert.deepEqual(values, ["SF123", "LP456"]);
-  assert.equal(joinTrackingNumbers(values), "SF123\nLP456");
+  const values = normalizeTrackingNumbers([" SF12345678 ", "SF12345678", "YT45678901"]);
+  assert.deepEqual(values, ["SF12345678", "YT45678901"]);
+  assert.equal(joinTrackingNumbers(values), "SF12345678\nYT45678901");
 });
 
 test("parses shipment records without shipping time and dates", () => {

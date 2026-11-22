@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "1688 → Excel (images + paid price)",
-  "version": "1.7.11",
-  "description": "1688: экспорт текущих цен и доставки в XLSX с корректировкой до оплаченного итога заказа.",
+  "version": "1.10.2",
+  "description": "1688: экспорт заказов в XLSX, добавление трек-номеров и проверка статусов доставки.",
   "action": {
     "default_popup": "popup.html",
     "default_title": "1688 → Excel"

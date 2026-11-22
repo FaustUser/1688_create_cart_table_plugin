@@ -821,7 +821,7 @@ async function buildAndDownload(rows, imgPx, pageType="orders", onProgress = nul
   <cellStyleXfs count="1">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
   </cellStyleXfs>
-  <cellXfs count="3">
+  <cellXfs count="4">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"
        applyAlignment="1">
       <alignment horizontal="center" vertical="center"/>
@@ -833,6 +833,10 @@ async function buildAndDownload(rows, imgPx, pageType="orders", onProgress = nul
     <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0"
        applyNumberFormat="1" applyAlignment="1">
       <alignment horizontal="center" vertical="center"/>
+    </xf>
+    <xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0"
+       applyNumberFormat="1" applyAlignment="1">
+      <alignment horizontal="center" vertical="center" wrapText="1"/>
     </xf>
   </cellXfs>
   <cellStyles count="1">
@@ -855,7 +859,7 @@ async function buildAndDownload(rows, imgPx, pageType="orders", onProgress = nul
       embedded.length,
       imgPx,
       embeddedRowIdx,
-      pageType === "orders" ? 2 : 0
+      pageType === "orders" ? 4 : 1
     );
     const imageNames = embedded.map((img, idx) => `image${idx + 1}.${img.ext}`);
     const drawingRels = makeDrawingRels(imageNames);
@@ -889,28 +893,31 @@ const contentHeaders = ["Картинка", "Ссылка", "Название н
 // type  — WB_1688_AUTO или WB_1688_EXPORT
 // label — сообщение в лог на время выполнения
 const ORDER_EXPORT_CONFIG = {
-  headers: ["Номер заказа", "Трек номер", "Картинка", "Дата заказа", "Ссылка", "Название на 1688", "Количество", "Цена за ед.", "Доставка по Китаю", "Скидка", "Итого юань"],
-  widths: (imgColWidth) => ["24", "24", imgColWidth ? imgColWidth.toFixed(2) : "30", "22", "24", "24", "11.5", "11.5", "17.3", "8.3", "11"],
+  headers: ["Владелец", "Номер заказа", "Трек номер", "Статус доставки", "Картинка", "Дата заказа", "Ссылка", "Название на 1688", "Количество", "Цена за ед.", "Доставка по Китаю", "Скидка", "Итого юань"],
+  widths: (imgColWidth) => ["24", "24", "24", "24", imgColWidth ? imgColWidth.toFixed(2) : "30", "22", "24", "24", "11.5", "11.5", "17.3", "8.3", "11"],
   buildCells: (row, excelRow) => ([
-    { c: 1, t: "inlineStr", v: row.orderNumber || "", s: "1" },
-    { c: 2, t: "inlineStr", v: "", s: "1" },
-    { c: 4, t: "inlineStr", v: row.orderDate || "", s: "1" },
-    { c: 5, t: "inlineStr", v: row.link || "", s: "1" },
-    { c: 6, t: "inlineStr", v: row.exportTitle || row.variant || row.title || "", s: "1" },
-    { c: 7, t: "n", v: Number(row.qty || 0), s: "0" },
-    { c: 8, t: "n", v: Number(row.unitPrice || 0), s: "2" },
-    { c: 9, t: "n", v: Number(row.shippingShare || 0), s: "2" },
-    { c: 10, t: "n", v: Number(row.discountShare || 0), s: "2" },
-    { c: 11, t: "f", f: `G${excelRow}*H${excelRow}+I${excelRow}-J${excelRow}`, s: "2" }
+    { c: 1, t: "inlineStr", v: "", s: "3" },
+    { c: 2, t: "inlineStr", v: row.orderNumber || "", s: "3" },
+    { c: 3, t: "inlineStr", v: "", s: "3" },
+    { c: 4, t: "inlineStr", v: "", s: "1" },
+    { c: 6, t: "inlineStr", v: row.orderDate || "", s: "1" },
+    { c: 7, t: "inlineStr", v: row.link || "", s: "1" },
+    { c: 8, t: "inlineStr", v: row.exportTitle || row.variant || row.title || "", s: "1" },
+    { c: 9, t: "n", v: Number(row.qty || 0), s: "0" },
+    { c: 10, t: "n", v: Number(row.unitPrice || 0), s: "2" },
+    { c: 11, t: "n", v: Number(row.shippingShare || 0), s: "2" },
+    { c: 12, t: "n", v: Number(row.discountShare || 0), s: "2" },
+    { c: 13, t: "f", f: `I${excelRow}*J${excelRow}+K${excelRow}-L${excelRow}`, s: "2" }
   ])
 };
 
 const CART_EXPORT_CONFIG = {
-  headers: ["Картинка", "Ссылка", "Название на 1688"],
-  widths: (imgColWidth) => [imgColWidth ? imgColWidth.toFixed(2) : "30", "28", "60"],
+  headers: ["Владелец", "Картинка", "Ссылка", "Название на 1688"],
+  widths: (imgColWidth) => ["24", imgColWidth ? imgColWidth.toFixed(2) : "30", "28", "60"],
   buildCells: (row) => ([
-    { c: 2, t: "inlineStr", v: row.link || "", s: "1" },
-    { c: 3, t: "inlineStr", v: row.exportTitle || row.variant || row.title || "", s: "1" }
+    { c: 1, t: "inlineStr", v: "", s: "3" },
+    { c: 3, t: "inlineStr", v: row.link || "", s: "1" },
+    { c: 4, t: "inlineStr", v: row.exportTitle || row.variant || row.title || "", s: "1" }
   ])
 };
 
@@ -929,7 +936,7 @@ function makeSheetXML(rows, hasDrawing, imgPx, drawingRelId="rId2", pageType="or
   for (let c = 1; c <= exportConfig.headers.length; c++) {
     const ref = colName(c) + "1";
     const value = exportConfig.headers[c - 1] || "";
-    headerRowXml += `<c r="${ref}" t="inlineStr" s="1"><is><t>${xmlEscape(value)}</t></is></c>`;
+    headerRowXml += `<c r="${ref}" t="inlineStr" s="${c === 1 ? "3" : "1"}"><is><t>${xmlEscape(value)}</t></is></c>`;
   }
   headerRowXml += `</row>`;
   rowsXml += headerRowXml;
@@ -960,7 +967,8 @@ function makeSheetXML(rows, hasDrawing, imgPx, drawingRelId="rId2", pageType="or
 
   const colsXml = `<cols>\n${widths.map((width, index) => {
     const col = index + 1;
-    return `  <col min="${col}" max="${col}" width="${width}" customWidth="1"/>`;
+    const style = col === 1 ? ' style="3"' : "";
+    return `  <col min="${col}" max="${col}" width="${width}" customWidth="1"${style}/>`;
   }).join("\n")}\n</cols>\n`;
   const drawingTag = hasDrawing ? `<drawing r:id="${drawingRelId}"/>\n` : "";
 
@@ -1096,6 +1104,8 @@ function renderTrackingState(state) {
     ? `Ошибка: ${state.error || "не удалось создать файл"}`
     : state.status === "cancelled"
       ? "Обработка остановлена"
+      : state.status === "finalizing"
+        ? "Создаю итоговый файл"
       : state.status === "completed"
         ? `Готово: обработано ${total} заказов`
         : `Обработано ${processed} из ${total} заказов`;
@@ -1105,35 +1115,56 @@ function renderTrackingState(state) {
   trackingFoundEl.textContent = String(state.found || 0);
   trackingEmptyEl.textContent = String(state.empty || 0);
   trackingRemainingEl.textContent = String(state.remaining || 0);
-  const running = ["idle", "running", "cancelling"].includes(state.status);
+  $("trackingLog").textContent = (state.events || []).map(formatJobEvent).join("\n");
+  const running = ["idle", "running", "finalizing", "cancelling"].includes(state.status);
   trackingChooseBtn.disabled = running;
-  trackingStopBtn.disabled = !running || state.status === "cancelling";
-  trackingStopBtn.style.display = running ? "" : "none";
+  trackingStopBtn.disabled = !running || ["finalizing", "cancelling"].includes(state.status);
+  trackingStopBtn.style.display = ["idle", "running", "cancelling"].includes(state.status) ? "" : "none";
 }
 
 trackingChooseBtn.addEventListener("click", () => trackingFileEl.click());
+$("trackingCopyLog").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("trackingLog").textContent);
+  } catch (error) {
+    log(`Не удалось скопировать журнал: ${error?.message || error}`, "err");
+  }
+});
 
 trackingFileEl.addEventListener("change", async () => {
   const file = trackingFileEl.files?.[0];
   if (!file) return;
+  $("trackingLog").textContent = "";
   trackingFileNameEl.textContent = file.name;
   trackingChooseBtn.disabled = true;
   try {
     if (!/\.(xlsx|xlsm)$/i.test(file.name)) throw new Error("Выберите файл XLSX или XLSM.");
     const bytes = new Uint8Array(await file.arrayBuffer());
     const inspection = await WB1688TrackingXlsx.inspectTrackingWorkbook(bytes);
-    if (!inspection.orders.length) throw new Error("В файле нет номеров заказов.");
+    if (!inspection.orders.length) {
+      if (inspection.skippedTrackedRows) {
+        $("trackingLog").textContent = "Все строки уже содержат трек-номера. Повторная проверка не требуется.";
+        trackingChooseBtn.disabled = false;
+        return;
+      }
+      throw new Error("В файле нет номеров заказов.");
+    }
+    if (inspection.skippedTrackedRows) {
+      $("trackingLog").textContent = `Пропущено заполненных строк: ${inspection.skippedTrackedRows}.`;
+    }
     const response = await chrome.runtime.sendMessage({
       type: "WB_1688_TRACKING_START",
       fileName: file.name,
       orders: inspection.orders,
       sourceBase64: trackingBytesToBase64(bytes),
-      productsByOrder: inspection.productsByOrder
+      productsByOrder: inspection.productsByOrder,
+      skippedTrackedRows: inspection.skippedTrackedRows
     });
     if (!response?.ok) throw new Error(response?.error || "Не удалось запустить обработку.");
     renderTrackingState(response.state);
   } catch (error) {
     log(String(error?.message || error), "err");
+    $("trackingLog").textContent = `Ошибка: ${error?.message || error}`;
     trackingChooseBtn.disabled = false;
   } finally {
     trackingFileEl.value = "";
@@ -1153,4 +1184,127 @@ chrome.runtime.onMessage.addListener((message) => {
 
 chrome.runtime.sendMessage({ type: "WB_1688_TRACKING_GET" })
   .then((response) => renderTrackingState(response?.state))
+  .catch(() => {});
+
+// ---------- Проверка статусов доставки для файла с треками ----------
+const deliveryFileEl = $("deliveryFile");
+const deliveryChooseBtn = $("deliveryChoose");
+const deliveryStopBtn = $("deliveryStop");
+const deliveryFileNameEl = $("deliveryFileName");
+const deliveryProgressEl = $("deliveryProgress");
+
+function formatJobEvent(event) {
+  const time = new Date(event.at).toLocaleTimeString("ru-RU");
+  const outcomes = { success: "успех", partial: "частичные данные", timeout: "тайм-аут", empty: "нет данных", error: "ошибка" };
+  const metrics = [
+    event.outcome ? `результат: ${outcomes[event.outcome] || event.outcome}` : "",
+    event.elapsedMs != null ? `всего ${event.elapsedMs} мс` : "",
+    event.navigationMs != null ? `навигация ${event.navigationMs} мс` : "",
+    event.firstShipmentMs != null ? `данные ${event.firstShipmentMs} мс` : "",
+    event.componentMs != null ? `компоненты ${event.componentMs} мс` : "",
+    event.contentMs != null ? `контент ${event.contentMs} мс` : "",
+    event.attempts != null ? `попыток ${event.attempts}` : "",
+    event.matched != null ? `треков ${event.matched}/${event.expected}` : "",
+    event.tracks != null ? `треков ${event.tracks}` : "",
+    event.shipments != null ? `отправлений ${event.shipments}` : "",
+    event.source ? `источник ${event.source}` : "",
+    event.skippedTrackedRows != null ? `пропущено строк ${event.skippedTrackedRows}` : "",
+    event.parallel != null ? `вкладок ${event.parallel}` : "",
+    event.total != null ? `заказов ${event.total}` : "",
+    event.error ? `ошибка: ${event.error}` : ""
+  ].filter(Boolean).join("; ");
+  return `[${time}] ${event.level.toUpperCase()} ${event.order || ""} ${event.message}${metrics ? ` — ${metrics}` : ""}`;
+}
+
+$("deliveryCopyLog").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("deliveryLog").textContent);
+  } catch (error) {
+    log(`Не удалось скопировать журнал: ${error?.message || error}`, "err");
+  }
+});
+
+function renderDeliveryState(state) {
+  if (!state) {
+    deliveryProgressEl.classList.remove("visible");
+    deliveryChooseBtn.disabled = false;
+    return;
+  }
+  const total = state.orders?.length || 0;
+  const processed = total - Number(state.remaining || 0);
+  deliveryFileNameEl.textContent = state.fileName || "";
+  deliveryProgressEl.classList.add("visible");
+  $("deliveryProgressText").textContent = state.status === "failed"
+    ? `Ошибка: ${state.error || "не удалось создать файл"}`
+    : state.status === "cancelled"
+      ? "Обработка остановлена"
+      : state.status === "finalizing"
+        ? "Создаю итоговый файл"
+      : state.status === "completed"
+        ? `Готово: проверено ${total} заказов`
+        : `Обработано ${processed} из ${total} заказов`;
+  $("deliveryPercent").textContent = `${Number(state.progress || 0)}%`;
+  $("deliveryProgressFill").style.width = `${Number(state.progress || 0)}%`;
+  $("deliveryCurrentOrder").textContent = state.currentOrder ? `Сейчас: ${state.currentOrder}` : "";
+  $("deliveryLog").textContent = (state.events || []).map(formatJobEvent).join("\n");
+  const running = ["idle", "running", "finalizing", "cancelling"].includes(state.status);
+  deliveryChooseBtn.disabled = running;
+  deliveryStopBtn.disabled = !running || ["finalizing", "cancelling"].includes(state.status);
+  deliveryStopBtn.style.display = ["idle", "running", "cancelling"].includes(state.status) ? "" : "none";
+}
+
+deliveryChooseBtn.addEventListener("click", () => deliveryFileEl.click());
+deliveryFileEl.addEventListener("change", async () => {
+  const file = deliveryFileEl.files?.[0];
+  if (!file) return;
+  $("deliveryLog").textContent = "";
+  deliveryFileNameEl.textContent = file.name;
+  deliveryChooseBtn.disabled = true;
+  try {
+    if (!/\.(xlsx|xlsm)$/i.test(file.name)) throw new Error("Выберите файл XLSX или XLSM.");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const inspection = await WB1688TrackingXlsx.inspectDeliveryWorkbook(bytes);
+    if (!inspection.orders.length) {
+      if (inspection.skippedDeliveredOrders) {
+        log(`Все ${inspection.skippedDeliveredOrders} заказов уже доставлены. Повторная проверка не требуется.`, "ok");
+        $("deliveryLog").textContent = `Все ${inspection.skippedDeliveredOrders} заказов уже доставлены. Повторная проверка не требуется.`;
+        deliveryChooseBtn.disabled = false;
+        return;
+      }
+      throw new Error("В файле нет заказов с трек-номерами.");
+    }
+    if (inspection.skippedDeliveredOrders) {
+      log(`Пропущено доставленных заказов: ${inspection.skippedDeliveredOrders}.`, "ok");
+    }
+    const response = await chrome.runtime.sendMessage({
+      type: "WB_1688_DELIVERY_START",
+      fileName: file.name,
+      orders: inspection.orders,
+      tracksByOrder: inspection.tracksByOrder,
+      sourceBase64: trackingBytesToBase64(bytes)
+    });
+    if (!response?.ok) throw new Error(response?.error || "Не удалось запустить проверку.");
+    renderDeliveryState(response.state);
+  } catch (error) {
+    log(String(error?.message || error), "err");
+    $("deliveryLog").textContent = `Ошибка: ${error?.message || error}`;
+    deliveryChooseBtn.disabled = false;
+  } finally {
+    deliveryFileEl.value = "";
+  }
+});
+
+deliveryStopBtn.addEventListener("click", async () => {
+  deliveryStopBtn.disabled = true;
+  const response = await chrome.runtime.sendMessage({ type: "WB_1688_DELIVERY_CANCEL" });
+  if (!response?.ok) log(response?.error || "Не удалось остановить обработку.", "err");
+  renderDeliveryState(response?.state);
+});
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === "WB_1688_DELIVERY_STATE") renderDeliveryState(message.state);
+});
+
+chrome.runtime.sendMessage({ type: "WB_1688_DELIVERY_GET" })
+  .then((response) => renderDeliveryState(response?.state))
   .catch(() => {});

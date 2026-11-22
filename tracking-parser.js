@@ -1,11 +1,10 @@
 (function (root) {
-  const LABEL_SOURCE = "(?:运单号码|运单编号|运单号|物流单号|物流运单号|物流编号|快递单号|快递编号|货运单号|包裹单号|包裹号|Номер\\s+накладной|Трек\\s*номер)";
+  const LABEL_SOURCE = "(?:运单号码|运单编号|运单号|快递运单号|快递单号|Номер\\s+накладной|Трек\\s*номер)";
   const LABEL_RE = new RegExp(LABEL_SOURCE, "i");
   const LABELED_VALUE_RE = new RegExp(`${LABEL_SOURCE}[\\s:：#-]*(?:复制)?[\\s:：#-]*([^\\r\\n]+)`, "gi");
   const TRACKING_VALUE_RE = /^[A-Za-z0-9-]{8,50}$/;
-  const GENERIC_TRACKING_LABEL_RE = /(运单|物流|快递|货运|包裹|承运|面单|mail|waybill|tracking|track|bill|накладной|трек)/i;
+  const GENERIC_TRACKING_LABEL_RE = /(运单号码|运单编号|运单号|快递单号|Номер\s+накладной|Трек\s*номер)/i;
   const NON_TRACKING_LABEL_RE = /(订单|订单号|订单编号|order\s*(?:id|no|number)|商品|货品|sku|offer)/i;
-  const TRACKING_FIELD_RE = /(mail|bill|waybill|tracking|track|express|logistics|parcel|package|delivery|运单|物流|快递|包裹|单号|编号)/i;
 
   function cleanValue(value) {
     return String(value || "")
@@ -19,6 +18,7 @@
     if (!TRACKING_VALUE_RE.test(text)) return false;
     if (!/\d/.test(text)) return false;
     if (/^\d{19,}$/.test(text)) return false;
+    if (/^LP\d{10,}$/i.test(text)) return false;
     return true;
   }
 
@@ -35,19 +35,8 @@
   }
 
   function trackingValuesFromObject(data) {
-    const values = [
-      data?.mailNo,
-      data?.logisticsBillNo,
-      data?.noLogisticsBillNo,
-      data?.logisticsExternalNo
-    ];
-    for (const [key, raw] of Object.entries(data || {})) {
-      if (!TRACKING_FIELD_RE.test(String(key || ""))) continue;
-      if (!["string", "number"].includes(typeof raw)) continue;
-      const value = String(raw || "").trim();
-      if (isTrackingValue(value)) values.push(value);
-    }
-    return values;
+    return [data?.waybillNo, data?.waybillNumber, data?.mailNo,
+      data?.trackingNumber, data?.trackingNo, data?.expressNo];
   }
 
   function extractGenericTrackingValuesFromText(text) {
@@ -146,7 +135,21 @@
     return { trackingNumber, products };
   }
 
+  function waybillFromMessageElement(element) {
+    for (const item of element?.shadowRoot?.querySelectorAll?.(".info-item") || []) {
+      const label = String(item.querySelector?.(".info-item-tit")?.textContent || "")
+        .replace(/[\s:：]/g, "");
+      if (!/^(运单号码|运单编号|运单号|快递运单号|快递单号)$/.test(label)) continue;
+      const value = String(item.querySelector?.(".info-item-val")?.textContent || "").trim();
+      return normalizeTrackingNumbers([value])[0] || "";
+    }
+    return "";
+  }
+
   function extractComponentShipments(elements) {
+    const messages = (elements || []).filter((element) =>
+      String(element?.tagName || "").toLowerCase() === "logistics-info-message"
+    );
     const tracks = (elements || []).filter((element) =>
       String(element?.tagName || "").toLowerCase() === "logistics-info-track"
     );
@@ -156,11 +159,21 @@
     const shipments = [];
     const seen = new Set();
 
-    tracks.forEach((trackElement, index) => {
+    const sources = messages.length ? messages : tracks;
+    sources.forEach((source, index) => {
+      const isMessage = String(source?.tagName || "").toLowerCase() === "logistics-info-message";
+      const messageElement = isMessage ? source : source.parentElement?.querySelector?.("logistics-info-message");
+      const trackElement = isMessage ? source.parentElement?.querySelector?.("logistics-info-track") : source;
       const productElement =
-        trackElement.parentElement?.querySelector?.("logistics-info-product") ||
+        source.parentElement?.querySelector?.("logistics-info-product") ||
         products[index];
-      const shipment = shipmentFromComponentData(trackElement.data, productElement?.data);
+      const shipment = shipmentFromComponentData({
+        waybillNo: waybillFromMessageElement(messageElement),
+        mailNo: trackElement?.data?.mailNo,
+        trackingNumber: trackElement?.data?.trackingNumber,
+        trackingNo: trackElement?.data?.trackingNo,
+        expressNo: trackElement?.data?.expressNo
+      }, productElement?.data);
       if (!shipment || seen.has(shipment.trackingNumber)) return;
       seen.add(shipment.trackingNumber);
       shipments.push(shipment);
@@ -338,6 +351,7 @@
     joinTrackingNumbers,
     parseShipmentCandidates,
     shipmentFromComponentData,
+    waybillFromMessageElement,
     extractComponentShipments,
     extractStrictTrackingNumber,
     extractShipments,

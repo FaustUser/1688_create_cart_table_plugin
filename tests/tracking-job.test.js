@@ -47,10 +47,10 @@ test("keeps source product metadata for background parsing", () => {
   assert.deepEqual(state.productsByOrder, productsByOrder);
 });
 
-test("does not count a shipment without matched products as found", () => {
+test("counts a found shipment even when its product association is missing", () => {
   let state = createTrackingJob("orders.xlsx", ["512"]);
   state = startOrder(state, 0);
   state = completeOrder(state, "512", [{ trackingNumber: "TRACK-1", products: [] }]);
-  assert.equal(state.found, 0);
-  assert.equal(state.empty, 1);
+  assert.equal(state.found, 1);
+  assert.equal(state.empty, 0);
 });

@@ -2,7 +2,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   extractOrderNumbersFromSheetXml,
+  extractPendingTrackingFromSheetXml,
   enrichSheetXml,
+  enrichDeliverySheetXml,
   shiftDrawingXml,
   zipStore,
   inspectTrackingWorkbook,
@@ -50,11 +52,76 @@ test("inserts tracking column and shifts cells and formulas", () => {
   assert.match(result.xml, /autoFilter ref="A1:D3"/);
 });
 
-test("updates existing tracking column without inserting another", () => {
+test("formats order and tracking data cells as text", () => {
+  const result = enrichSheetXml(sheet, [], { "512": ["TRACK-512"] }, new Map([[0, 3], [1, 4]]));
+  assert.match(result.xml, /<c[^>]*r="A2"[^>]*s="3"|<c[^>]*s="3"[^>]*r="A2"/);
+  assert.match(result.xml, /<c r="B2"[^>]*\bs="3"/);
+});
+
+test("keeps existing tracking numbers when a generated file is uploaded again", () => {
   const once = enrichSheetXml(sheet, [], { "512": ["SF1"] }).xml;
   const twice = enrichSheetXml(once, [], { "512": ["SF2"] }).xml;
   assert.equal((twice.match(/Трек номер/g) || []).length, 1);
-  assert.match(twice, /<c r="B2" t="inlineStr"[^>]*>[\s\S]*<t>SF2<\/t>/);
+  assert.match(twice, /<c r="B2" t="inlineStr"[^>]*>[\s\S]*<t>SF1<\/t>/);
+  assert.doesNotMatch(twice, /SF2/);
+});
+
+test("keeps delivery status on rows whose tracking number was already filled", () => {
+  const withTracks = enrichSheetXml(sheet, [], { "512": ["SF1"] }).xml;
+  const withStatus = enrichDeliverySheetXml(withTracks, [], { "512": { SF1: "Доставлено" } }).xml;
+  const updated = enrichSheetXml(withStatus, [], { "512": ["SF2"] }).xml;
+  const row2 = updated.match(/<row r="2">[\s\S]*?<\/row>/)[0];
+  assert.match(row2, /<c r="B2"[^>]*><is><t>SF1<\/t>/);
+  assert.match(row2, /Доставлено/);
+});
+
+test("queues only blank product rows and preserves filled rows of the same order", () => {
+  const source = `<?xml version="1.0"?><worksheet><sheetData>
+    <row r="1"><c r="A1" t="inlineStr"><is><t>Номер заказа</t></is></c><c r="B1" t="inlineStr"><is><t>Трек номер</t></is></c><c r="C1" t="inlineStr"><is><t>Статус доставки</t></is></c><c r="D1" t="inlineStr"><is><t>Ссылка</t></is></c></row>
+    <row r="2"><c r="A2" t="inlineStr"><is><t>512</t></is></c><c r="B2" t="inlineStr"><is><t>OLD</t></is></c><c r="C2" t="inlineStr"><is><t>Доставлено</t></is></c><c r="D2" t="inlineStr"><is><t>https://detail.1688.com/offer/100.html</t></is></c></row>
+    <row r="3"><c r="A3" t="inlineStr"><is><t>512</t></is></c><c r="B3" t="inlineStr"><is><t></t></is></c><c r="C3" t="inlineStr"><is><t></t></is></c><c r="D3" t="inlineStr"><is><t>https://detail.1688.com/offer/200.html</t></is></c></row>
+    <row r="4"><c r="A4" t="inlineStr"><is><t>999</t></is></c><c r="B4" t="inlineStr"><is><t>DONE</t></is></c></row>
+  </sheetData></worksheet>`;
+  const inspection = extractPendingTrackingFromSheetXml(source);
+  assert.deepEqual(inspection.orders, ["512"]);
+  assert.equal(inspection.skippedTrackedRows, 2);
+  assert.equal(inspection.skippedTrackedOrders, 1);
+  assert.deepEqual(inspection.productsByOrder["512"].map((item) => item.offerId), ["200"]);
+  const result = enrichSheetXml(source, [], { "512": ["NEW"], "999": ["WRONG"] }).xml;
+  assert.match(result.match(/<row r="2">[\s\S]*?<\/row>/)[0], /OLD[\s\S]*Доставлено/);
+  assert.match(result.match(/<row r="3">[\s\S]*?<\/row>/)[0], /NEW/);
+  assert.match(result.match(/<row r="4">[\s\S]*?<\/row>/)[0], /DONE/);
+});
+
+test("treats self-closing tracking cells as blank even when the next cell has a value", () => {
+  const source = `<?xml version="1.0"?><worksheet><sheetData>
+    <row r="1"><c r="A1" t="inlineStr"><is><t>Номер заказа</t></is></c><c r="B1" t="inlineStr"><is><t>Трек номер</t></is></c><c r="C1" t="inlineStr"><is><t>Название на 1688</t></is></c></row>
+    <row r="2"><c r="A2" t="inlineStr"><is><t>512</t></is></c><c r="B2" s="4"/><c r="C2" t="inlineStr"><is><t>Товар</t></is></c></row>
+  </sheetData></worksheet>`;
+  const inspection = extractPendingTrackingFromSheetXml(source);
+  assert.deepEqual(inspection.orders, ["512"]);
+  assert.equal(inspection.skippedTrackedRows, 0);
+  assert.deepEqual(inspection.productsByOrder["512"].map((item) => item.title), ["Товар"]);
+  const result = enrichSheetXml(source, [], { "512": ["TRACK-512"] }).xml;
+  assert.match(result.match(/<row r="2">[\s\S]*?<\/row>/)[0], /<c r="B2"[^>]*>[\s\S]*TRACK-512[\s\S]*<c r="C2"/);
+});
+
+test("rechecks a row containing an internal LP number and keeps its real track", () => {
+  const source = enrichSheetXml(sheet, [], { "512": ["435404121130551"] }).xml
+    .replace("<t>435404121130551</t>", "<t>LP00851692921520\n435404121130551</t>");
+  assert.deepEqual(extractPendingTrackingFromSheetXml(source).orders, ["512"]);
+  const repaired = enrichSheetXml(source, [], {}).xml;
+  const row2 = repaired.match(/<row r="2">[\s\S]*?<\/row>/)[0];
+  assert.match(row2, /435404121130551/);
+  assert.doesNotMatch(row2, /LP00851692921520/);
+});
+
+test("column insertion preserves absolute formula references and updates row spans", () => {
+  const source = sheet.replace('<row r="2">', '<row r="2" spans="1:3">')
+    .replace('<f>B2*2</f>', '<f>$B$2*B2</f>');
+  const result = enrichSheetXml(source, [], { "512": ["SF1"] }).xml;
+  assert.match(result, /<row r="2" spans="1:4">/);
+  assert.match(result, /<f>\$C\$2\*C2<\/f>/);
 });
 
 test("shifts image anchors at and after inserted column", () => {
@@ -72,7 +139,9 @@ test("round-trips a complete workbook archive", async () => {
   const source = zipStore(files);
   assert.deepEqual((await inspectTrackingWorkbook(source)).orders, ["512"]);
   const enriched = await enrichTrackingWorkbook(source, { "512": ["TRACK-512"] });
-  assert.deepEqual((await inspectTrackingWorkbook(enriched)).orders, ["512"]);
+  assert.deepEqual((await inspectTrackingWorkbook(enriched)).orders, []);
+  assert.equal((await inspectTrackingWorkbook(enriched)).skippedTrackedRows, 2);
+  assert.match(new TextDecoder().decode(enriched), /Статус доставки/);
 });
 
 test("assigns shipment tracking to each product row of the same order", () => {
